@@ -4,12 +4,14 @@ from loguru import logger
 from neo4j import AsyncGraphDatabase, AsyncDriver
 from api.config import settings
 
+
 class Neo4jMCP:
     """
     비동기 Neo4j 어댑터 (MCP 스타일)
     - query: Cypher 실행 후 list[dict] 반환
     - ping: 연결 확인
     """
+
     def __init__(self) -> None:
         self._uri = settings.neo4j_uri
         self._user = settings.neo4j_user
@@ -53,14 +55,19 @@ class Neo4jMCP:
             return info
 
         # 2) 현재 세션 DB 이름 조회 (버전 호환: 5.x → SHOW, 4.x → CALL db.info())
-        current_db = []
+        current_db: List[Dict[str, Any]] = []
         try:
             async with driver.session(database=self._database) as session:
                 # 우선 5.x 구문 시도
-                 cur = await session.run("CALL db.info() YIELD name RETURN name")
-                 info["current_database"] = [rec.data() async for rec in cur]
-        except Exception as e:
-            info["current_database_error"] = str(e)
+                cur = await session.run("SHOW CURRENT DATABASE")
+                current_db = [rec.data() async for rec in cur]
+        except Exception:
+            try:
+                async with driver.session(database=self._database) as session:
+                    cur = await session.run("CALL db.info() YIELD name RETURN name")
+                    current_db = [rec.data() async for rec in cur]
+            except Exception as e:
+                info["current_database_error"] = str(e)
         if current_db:
             info["current_database"] = current_db
 
@@ -77,10 +84,14 @@ class Neo4jMCP:
                     dedup[r["name"]] = r  # 같은 이름이 오면 마지막 값으로 덮어씀
                 info["databases"] = list(dedup.values())
         except Exception as e:
-            info["databases_error"] = f"SHOW DATABASES failed (need permissions?): {e!s}"
+            info["databases_error"] = (
+                f"SHOW DATABASES failed (need permissions?): {e!s}"
+            )
         return info
 
-    async def query(self, cypher: str, params: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
+    async def query(
+        self, cypher: str, params: Dict[str, Any] | None = None
+    ) -> List[Dict[str, Any]]:
         params = params or {}
         driver = await self._ensure_driver()
         logger.debug(f"[Neo4j] Cypher={cypher} params={params}")
