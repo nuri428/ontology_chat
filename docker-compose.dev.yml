@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # API 서버 (개발용)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: ontology-chat-api-dev
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+      - PYTHONPATH=/app
+      # Neo4j 설정 (외부 서비스)
+      - NEO4J_URI=${NEO4J_URI:-neo4j://192.168.0.10:7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
+      - NEO4J_DATABASE=${NEO4J_DATABASE:-news-def-topology}
+      # OpenSearch 설정 (외부 서비스)
+      - OPENSEARCH_HOST=${OPENSEARCH_HOST:-http://192.168.0.10:9200}
+      - OPENSEARCH_USER=${OPENSEARCH_USER:-admin}
+      - OPENSEARCH_PASSWORD=${OPENSEARCH_PASSWORD:-admin}
+      - NEWS_BULK_INDEX=${NEWS_BULK_INDEX:-news_article_bulk}
+      - NEWS_EMBEDDING_INDEX=${NEWS_EMBEDDING_INDEX:-news_article_embedding}
+      # OpenAI 설정
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # 기타 설정
+      - NEO4J_SEARCH_LOOKBACK_DAYS=${NEO4J_SEARCH_LOOKBACK_DAYS:-180}
+      - NEO4J_SEARCH_DEFAULT_DOMAIN=${NEO4J_SEARCH_DEFAULT_DOMAIN:-}
+      - NEO4J_SEARCH_CYPHER_FILE=${NEO4J_SEARCH_CYPHER_FILE:-api/config/graph_search.cypher}
+      - GRAPH_SEARCH_KEYS=${GRAPH_SEARCH_KEYS:-}
+    networks:
+      - ontology-network
+    volumes:
+      - ./api:/app/api
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./uv.lock:/app/uv.lock
+    restart: unless-stopped
+    command: ["uv", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  # UI 서버 (개발용)
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: ontology-chat-ui-dev
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE_URL=http://api:8000
+      - PYTHONPATH=/app
+    depends_on:
+      - api
+    networks:
+      - ontology-network
+    volumes:
+      - ./ui:/app/ui
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./uv.lock:/app/uv.lock
+    restart: unless-stopped
+    command: ["uv", "run", "streamlit", "run", "ui/main.py", "--server.address", "0.0.0.0", "--server.port", "8501", "--server.runOnSave", "true"]
+
+
+
+networks:
+  ontology-network:
+    driver: bridge
