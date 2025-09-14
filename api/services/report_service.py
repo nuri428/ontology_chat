@@ -144,6 +144,29 @@ class ReportService:
         }
         news_res = await self.os.search(index=os_index, query=os_body, size=news_size)
         news_hits = news_res.get("hits", {}).get("hits", [])
+        # Fallback: 인덱스/쿼리 불일치로 결과 0인 경우, 와일드카드 및 단순 쿼리 재시도
+        if not news_hits:
+            try:
+                fallback_index = "news-*"
+                fallback_body = {
+                    "query": {
+                        "query_string": {
+                            "query": query,
+                            "fields": ["title^3","content","text","metadata.title^3","metadata.content"],
+                            "default_operator": "OR",
+                        }
+                    },
+                    "sort": [
+                        {"created_datetime": {"order": "desc", "missing": "_last"}},
+                        {"created_date": {"order": "desc", "missing": "_last"}},
+                        "_score"
+                    ],
+                    "_source": {"includes": ["title","url","created_date","created_datetime"]}
+                }
+                news_res_fb = await self.os.search(index=fallback_index, query=fallback_body, size=news_size)
+                news_hits = news_res_fb.get("hits", {}).get("hits", [])
+            except Exception as e:
+                logger.warning(f"[ReportService] OpenSearch fallback failed: {e}")
 
         # --- Neo4j (검색 Cypher 우선: 파일/환경에서 로드 → 없으면 라벨어웨어 빌드) ---
         cypher = settings.resolve_search_cypher()
@@ -175,6 +198,8 @@ class ReportService:
             "database": settings.neo4j_database,
             "lookback_days": lookback_days,
             "domain": domain,
+            "news_hits_count": len(news_hits),
+            "news_index_used": os_index,
         }
         return ReportContext(
             query=query,

@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 from loguru import logger
 from neo4j import AsyncGraphDatabase, AsyncDriver
+from neo4j.graph import Node, Relationship, Path
 from api.config import settings
 
 class Neo4jMCP:
@@ -80,13 +81,77 @@ class Neo4jMCP:
             info["databases_error"] = f"SHOW DATABASES failed (need permissions?): {e!s}"
         return info
 
+    def _to_jsonable(self, value: Any) -> Any:
+        # 기본 타입은 그대로 반환
+        if value is None or isinstance(value, (bool, int, float, str)):
+            return value
+
+        # Neo4j temporal/spatial 등은 문자열로 안전 변환
+        try:
+            import datetime
+            if isinstance(value, (datetime.date, datetime.datetime)):
+                return value.isoformat()
+        except Exception:
+            pass
+
+        # Node 변환: 속성 + elementId + labels 보강
+        if isinstance(value, Node):
+            out = dict(value)
+            out["elementId"] = getattr(value, "element_id", None)
+            try:
+                out["labels"] = list(getattr(value, "labels", []))
+            except Exception:
+                out["labels"] = []
+            return out
+
+        # Relationship 변환: 속성 + elementId + type + 양끝 노드 id 보강
+        if isinstance(value, Relationship):
+            out = dict(value)
+            out["elementId"] = getattr(value, "element_id", None)
+            out["type"] = getattr(value, "type", None)
+            # start/end node element ids 가능하면 추출
+            start_id = None
+            end_id = None
+            try:
+                nodes = getattr(value, "nodes", None)
+                if nodes and len(nodes) == 2:
+                    start_id = getattr(nodes[0], "element_id", None)
+                    end_id = getattr(nodes[1], "element_id", None)
+            except Exception:
+                pass
+            out["start_id"] = start_id
+            out["end_id"] = end_id
+            return out
+
+        # Path 변환: nodes/relationships 배열로 분해
+        if isinstance(value, Path):
+            return {
+                "nodes": [self._to_jsonable(n) for n in value.nodes],
+                "relationships": [self._to_jsonable(r) for r in value.relationships],
+            }
+
+        # dict/list/tuple 재귀 처리
+        if isinstance(value, dict):
+            return {k: self._to_jsonable(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [self._to_jsonable(v) for v in value]
+
+        # 그 외는 문자열 표현으로 폴백 (예: neo4j.time, custom types)
+        try:
+            return str(value)
+        except Exception:
+            return None
+
     async def query(self, cypher: str, params: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
         params = params or {}
         driver = await self._ensure_driver()
         logger.debug(f"[Neo4j] Cypher={cypher} params={params}")
         async with driver.session(database=self._database) as session:
             cursor = await session.run(cypher, params)
-            records = []
+            records: List[Dict[str, Any]] = []
             async for record in cursor:
-                records.append(record.data())
+                raw = record.data()
+                # 각 필드를 JSON 직렬화 가능하게 변환
+                jsonable = {k: self._to_jsonable(v) for k, v in raw.items()}
+                records.append(jsonable)
             return records

@@ -124,7 +124,8 @@ def render_pyvis_graph(items: List[Dict[str, Any]], height: str = "680px", key_p
         n = r.get("n", {})
         if n:  # 노드가 있는 경우
             labels = r.get("labels", [])
-            nid = n.get("elementId") or n.get("id") or f"node_{idx}"
+            # 서버가 elementId를 별도로 내려주는 경우 대비(n_id)
+            nid = n.get("elementId") or n.get("id") or r.get("n_id") or f"node_{idx}"
             if nid in seen_nodes:
                 continue
             seen_nodes.add(nid)
@@ -151,8 +152,9 @@ def render_pyvis_graph(items: List[Dict[str, Any]], height: str = "680px", key_p
         # 관계 정보 처리
         rel = r.get("r", {})
         if rel:  # 관계가 있는 경우
-            start_node = r.get("start", {}).get("elementId") or r.get("start", {}).get("id")
-            end_node = r.get("end", {}).get("elementId") or r.get("end", {}).get("id")
+            # Cypher에서 elementId(startNode) / elementId(endNode)를 start_id/end_id로 반환하도록 권장
+            start_node = r.get("start_id") or (r.get("start", {}) or {}).get("elementId") or (r.get("start", {}) or {}).get("id")
+            end_node = r.get("end_id") or (r.get("end", {}) or {}).get("elementId") or (r.get("end", {}) or {}).get("id")
             rel_type = r.get("type", "RELATES_TO")
             
             if start_node and end_node and start_node != end_node:
@@ -217,7 +219,10 @@ with tab_graph:
         example_cypher = """
 MATCH (n)-[r]-(m)
 WHERE toLower(n.title) CONTAINS toLower($q) OR toLower(m.title) CONTAINS toLower($q)
-RETURN n, labels(n) as labels, r, type(r) as type, m, labels(m) as end_labels
+RETURN n, labels(n) AS labels,
+       r, type(r) AS type,
+       m AS end, labels(m) AS end_labels,
+       elementId(n) AS start_id, elementId(m) AS end_id
 LIMIT $limit
         """.strip()
         st.code(example_cypher, language="cypher")
@@ -282,8 +287,11 @@ with tab_report:
         "query": r_input["q"],
         "domain": r_input["domain"],
         "lookback_days": r_input["lookback_days"],
-        "limit": r_input["limit"],
+        # 보고서 API 스키마에 맞게 전달
+        "news_size": int(r_input["limit"]),
+        "graph_limit": int(r_input["limit"]),
         "symbol": r_symbol or None,
+        # 섹션 토글은 현재 백엔드에서 사용하지 않지만, 확장 대비 유지
         "sections": {
             "news": include_news,
             "graph": include_graph,
