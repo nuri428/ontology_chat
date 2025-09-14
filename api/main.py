@@ -1,12 +1,15 @@
 # src/ontolog_chat/main.py
-from fastapi import FastAPI, Body
+from fastapi import Body, Depends, FastAPI, HTTPException
 from api.logging import setup_logging
 from api.config import settings
 from api.routers import health
 from api.services.chat_service import ChatService
-from api.services.report_service import ReportService, ReportRequest, ReportResponse
+from api.services.report_service import (
+    ReportRequest,
+    ReportResponse,
+    ReportService,
+)
 from api.mcp import router as mcp_router  # ← 추가
-from fastapi import HTTPException
 
 logger = setup_logging()
 app = FastAPI(title="ontolog_chat", version="0.1.0")
@@ -17,6 +20,11 @@ app.include_router(mcp_router.router)  # ← 추가
 chat_service = ChatService()
 report_service = ReportService()
 
+
+def get_report_service() -> ReportService:
+    return report_service
+
+
 @app.post("/chat")
 async def chat(query: str = Body(..., embed=True)):
     result = await chat_service.generate_answer(query)
@@ -24,9 +32,10 @@ async def chat(query: str = Body(..., embed=True)):
 
 
 @app.post("/report", response_model=ReportResponse)
-async def create_report(req: ReportRequest):
+async def create_report(
+    req: ReportRequest, service: ReportService = Depends(get_report_service)
+):
     try:
-        service = ReportService()
         out = await service.generate_report(
             query=req.query,
             domain=req.domain,
@@ -51,6 +60,7 @@ async def create_report(req: ReportRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/")
 async def root():
