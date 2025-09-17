@@ -1,7 +1,8 @@
 from __future__ import annotations
 from typing import List, Dict
 import os
-from loguru import logger
+from api.logging import setup_logging
+logger = setup_logging()
 
 try:
     from openai import AsyncOpenAI

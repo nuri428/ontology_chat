@@ -1,5 +1,6 @@
 from typing import Any, Dict
-from loguru import logger
+from api.logging import setup_logging
+logger = setup_logging()
 from api.mcp.base import MCPTool
 from api.adapters.mcp_opensearch import OpenSearchMCP
 from api.adapters.mcp_neo4j import Neo4jMCP
@@ -7,16 +8,49 @@ from api.adapters.mcp_stock import StockMCP
 
 class SearchNewsTool:
     name = "search_news"
-    description = "뉴스/문서 검색 (OpenSearch). Args: index:str, query:dict"
+    description = "뉴스/문서 검색 (OpenSearch). Args: index:str, query:str|dict, limit:int"
 
     def __init__(self, os_client: OpenSearchMCP | None = None):
         self.os = os_client or OpenSearchMCP()
 
     async def call(self, **kwargs) -> Dict[str, Any]:
-        index = kwargs.get("index", "news-*")
-        query = kwargs.get("query", {"query": {"match_all": {}}})
-        logger.info(f"[MCP] search_news index={index}")
-        res = await self.os.search(index=index, query=query)
+        index = kwargs.get("index", "news_article_bulk")
+        query_str = kwargs.get("query", "")
+        limit = kwargs.get("limit", 5)
+        
+        # 문자열 쿼리를 OpenSearch 쿼리로 변환
+        if isinstance(query_str, str):
+            search_query = {
+                "query": {
+                    "bool": {
+                        "should": [
+                            {
+                                "multi_match": {
+                                    "query": query_str,
+                                    "fields": ["title^4", "content^2", "text^3", "metadata.title^4", "metadata.content^2"],
+                                    "type": "best_fields",
+                                    "operator": "or",
+                                }
+                            },
+                            {
+                                "query_string": {
+                                    "query": query_str,
+                                    "fields": ["title^3", "content", "metadata.title^3", "metadata.content", "text"],
+                                    "default_operator": "OR",
+                                }
+                            }
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                },
+                "sort": [{"created_datetime": {"order": "desc", "missing": "_last"}}]
+            }
+        else:
+            # 이미 딕셔너리인 경우 그대로 사용
+            search_query = query_str
+            
+        logger.info(f"[MCP] search_news index={index} query_str={query_str}")
+        res = await self.os.search(index=index, query=search_query, size=limit)
         return {"ok": True, "data": res}
 
 class QueryGraphTool:

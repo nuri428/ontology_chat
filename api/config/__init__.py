@@ -1,3 +1,4 @@
+# Configuration package
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional, Dict, List
 import json
@@ -22,6 +23,10 @@ class Settings(BaseSettings):
     news_embedding_index: str = "news-embedding"
 
     stock_api_key: str | None = None
+    
+    # Ollama LLM 설정
+    ollama_host: str = "localhost"
+    ollama_model: str = "llama3.1:8b"
     
     neo4j_search_cypher: Optional[str] = None    
     graph_search_keys: Optional[str] = None  # JSON 문자열
@@ -48,6 +53,13 @@ class Settings(BaseSettings):
             "domain": self.neo4j_search_default_domain,
             "lookback_days": self.neo4j_search_lookback_days,
         }
+    
+    def get_ollama_base_url(self) -> str:
+        """Ollama 서버 URL 생성"""
+        if "://" in self.ollama_host:
+            return f"{self.ollama_host}:11434" if ":11434" not in self.ollama_host else self.ollama_host
+        else:
+            return f"http://{self.ollama_host}:11434"
 
     def get_graph_search_keys(self) -> Dict[str, List[str]]:
         """

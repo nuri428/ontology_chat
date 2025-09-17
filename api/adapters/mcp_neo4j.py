@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any, Dict, List
-from loguru import logger
+from api.logging import setup_logging
+logger = setup_logging()
 from neo4j import AsyncGraphDatabase, AsyncDriver
 from neo4j.graph import Node, Relationship, Path
 from api.config import settings

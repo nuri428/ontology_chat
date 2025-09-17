@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any, Dict
-from loguru import logger
+from api.logging import setup_logging
+logger = setup_logging()
 import anyio
 import yfinance as yf
 from api.config import settings

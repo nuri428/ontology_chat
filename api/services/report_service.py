@@ -5,7 +5,8 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
-from loguru import logger
+from api.logging import setup_logging
+logger = setup_logging()
 
 from api.adapters.mcp_neo4j import Neo4jMCP
 from api.adapters.mcp_opensearch import OpenSearchMCP

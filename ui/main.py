@@ -5,8 +5,24 @@ import requests
 import streamlit as st
 from typing import Any, Dict, List
 
+# Enhanced UI components
+try:
+    from components import (
+        display_enhanced_meta_info, 
+        format_answer_with_quality_indicators,
+        display_cache_stats
+    )
+    ENHANCED_UI_AVAILABLE = True
+except ImportError:
+    ENHANCED_UI_AVAILABLE = False
+
 # --------- 기본 설정 ---------
-st.set_page_config(page_title="Ontology Chat Stream", layout="wide")
+st.set_page_config(
+    page_title="Enhanced Ontology Chat", 
+    page_icon="🚀",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # --------- 유틸: 고유 key 생성기 ----------
 def wkey(name: str, prefix: str) -> str:
@@ -112,25 +128,77 @@ def render_pyvis_graph(items: List[Dict[str, Any]], height: str = "680px", key_p
         directed=False,
         cdn_resources="remote"  # CDN 리소스 사용으로 안정성 향상
     )
-    net.toggle_physics(True)  # 물리 엔진 on (드래그/움직임)
+    
+    # 물리 시뮬레이션 설정 (안정화 개선)
+    net.set_options("""
+    {
+        "physics": {
+            "enabled": true,
+            "stabilization": {
+                "enabled": true,
+                "iterations": 200,
+                "updateInterval": 50,
+                "onlyDynamicEdges": false,
+                "fit": true
+            },
+            "barnesHut": {
+                "gravitationalConstant": -2000,
+                "centralGravity": 0.3,
+                "springLength": 95,
+                "springConstant": 0.04,
+                "damping": 0.09,
+                "avoidOverlap": 0.5
+            },
+            "maxVelocity": 50,
+            "minVelocity": 0.1,
+            "solver": "barnesHut",
+            "timestep": 0.35
+        },
+        "nodes": {
+            "font": {
+                "size": 12,
+                "color": "white"
+            },
+            "borderWidth": 2,
+            "borderWidthSelected": 3
+        },
+        "edges": {
+            "font": {
+                "size": 10,
+                "color": "white"
+            },
+            "smooth": {
+                "type": "continuous"
+            }
+        }
+    }
+    """)
 
     # 노드와 에지 처리
     seen_nodes = set()
     seen_edges = set()
     
-    # 1단계: 노드 추가
-    for idx, r in enumerate(items):
+    # 1단계: 노드 추가 (최대 20개로 제한하여 안정성 향상)
+    max_nodes = 20
+    for idx, r in enumerate(items[:max_nodes]):
         # 노드 정보 처리
         n = r.get("n", {})
         if n:  # 노드가 있는 경우
             labels = r.get("labels", [])
-            # 서버가 elementId를 별도로 내려주는 경우 대비(n_id)
+            # 고유한 노드 ID 생성 (elementId가 없는 경우)
             nid = n.get("elementId") or n.get("id") or r.get("n_id") or f"node_{idx}"
             if nid in seen_nodes:
                 continue
             seen_nodes.add(nid)
             
-            title = n.get("title") or n.get("name") or n.get("contractId") or n.get("articleId") or "(node)"
+            # 노드에 고유 ID 저장 (관계 처리용)
+            n["_generated_id"] = nid
+            
+            title = n.get("title") or n.get("name") or n.get("contractId") or n.get("articleId") or f"Node_{idx}"
+            # 제목이 너무 길면 잘라내기
+            if len(title) > 30:
+                title = title[:27] + "..."
+            
             group = ",".join(labels) if labels else "Node"
             
             # 노드 색상 설정 (라벨에 따라)
@@ -144,15 +212,46 @@ def render_pyvis_graph(items: List[Dict[str, Any]], height: str = "680px", key_p
             elif "Weapon" in labels:
                 color = "#F0E68C"  # 카키색
             
-            tooltip = f"<b>{title}</b><br/>labels={labels}<br/>" + "<br/>".join(f"{k}: {v}" for k, v in n.items() if k not in ("elementId",))
-            net.add_node(nid, label=title, title=tooltip, group=group, color=color)
+            tooltip = f"<b>{title}</b><br/>labels={labels}<br/>" + "<br/>".join(f"{k}: {v}" for k, v in n.items() if k not in ("elementId", "_generated_id"))
+            net.add_node(nid, label=title, title=tooltip, group=group, color=color, size=20)
     
-    # 2단계: 에지 추가 (관계 정보가 있는 경우)
-    for r in items:
-        # 관계 정보 처리
+    # 2단계: 에지 추가 (관계 정보가 있는 경우) - 제한된 노드에 대해서만
+    for r in items[:max_nodes]:
+        # 새로운 관계 데이터 구조 처리 (all_relationships)
+        all_relationships = r.get("all_relationships", [])
+        if all_relationships:
+            current_node = r.get("n", {})
+            current_node_id = current_node.get("_generated_id") or current_node.get("elementId") or current_node.get("id")
+            
+            for rel_list in all_relationships:
+                if isinstance(rel_list, list):
+                    for rel in rel_list:
+                        if isinstance(rel, list) and len(rel) >= 3:
+                            # [start_node, rel_type, end_node] 형태
+                            start_node_obj, rel_type, end_node_obj = rel[0], rel[1], rel[2]
+                            
+                            # 시작 노드가 비어있고 끝 노드에 이벤트 정보가 있는 경우
+                            # 현재 노드에서 이벤트로의 관계로 처리
+                            if (not start_node_obj or start_node_obj == {}) and isinstance(end_node_obj, dict) and end_node_obj:
+                                # 이벤트 노드 찾기 (같은 이벤트 ID를 가진 노드)
+                                event_id = end_node_obj.get("eventId")
+                                if event_id:
+                                    # 다른 노드들 중에서 같은 eventId를 가진 노드 찾기
+                                    for other_r in items:
+                                        other_node = other_r.get("n", {})
+                                        if (other_node.get("eventId") == event_id and 
+                                            other_node.get("_generated_id") != current_node_id):
+                                            other_node_id = other_node.get("_generated_id")
+                                            if other_node_id:
+                                                edge_id = f"{current_node_id}_{other_node_id}_{rel_type}"
+                                                if edge_id not in seen_edges:
+                                                    seen_edges.add(edge_id)
+                                                    net.add_edge(current_node_id, other_node_id, label=rel_type, title=rel_type)
+                                                break
+        
+        # 기존 관계 정보 처리 (하위 호환성)
         rel = r.get("r", {})
         if rel:  # 관계가 있는 경우
-            # Cypher에서 elementId(startNode) / elementId(endNode)를 start_id/end_id로 반환하도록 권장
             start_node = r.get("start_id") or (r.get("start", {}) or {}).get("elementId") or (r.get("start", {}) or {}).get("id")
             end_node = r.get("end_id") or (r.get("end", {}) or {}).get("elementId") or (r.get("end", {}) or {}).get("id")
             rel_type = r.get("type", "RELATES_TO")
@@ -166,6 +265,9 @@ def render_pyvis_graph(items: List[Dict[str, Any]], height: str = "680px", key_p
     # 3단계: 관계가 없는 경우, 노드들 간의 가상 연결 생성 (선택적)
     if not seen_edges and len(seen_nodes) > 1:
         st.info("관계 정보가 없어 노드만 표시됩니다. 관계를 보려면 Neo4j 쿼리를 수정하세요.")
+        # 디버그 정보 표시
+        st.write(f"관계 데이터 샘플: {all_relationships[:2] if all_relationships else 'None'}")
+        st.write(f"현재 노드 ID: {[r.get('n', {}).get('_generated_id') for r in items]}")
 
     # (간단 버전) 관계(edge) 없이 노드만. 관계 시각화가 필요하면 백엔드에서 edges까지 넘겨주세요.
     try:
@@ -194,13 +296,146 @@ def render_pyvis_graph(items: List[Dict[str, Any]], height: str = "680px", key_p
                 df = pd.DataFrame(df_data)
                 st.dataframe(df, use_container_width=True)
 
-# --------- 탭 구성 ----------
-tab_graph, tab_chat, tab_report = st.tabs(["🔗 그래프 컨텍스트", "💬 Chat", "📑 리포트"])
+# --------- 메인 헤더 ----------
+st.title("🚀 Enhanced Ontology Chat System")
+st.markdown("""
+**Context Engineering 시스템**이 업그레이드되었습니다! 
+🔍 지능형 검색, 💡 LLM 인사이트, ⚡ 캐싱, 🛡️ 안정성이 모두 향상되었습니다.
+""")
 
-# ========== 탭 1: 그래프 컨텍스트 ==========
+if ENHANCED_UI_AVAILABLE:
+    st.success("✅ Enhanced UI 컴포넌트가 활성화되었습니다.")
+else:
+    st.info("ℹ️ 기본 UI로 동작합니다. 향상된 기능을 위해 `ui/components.py`를 확인하세요.")
+
+st.divider()
+
+# --------- 탭 구성 ----------
+tab_chat, tab_graph, tab_report = st.tabs(["💬 Enhanced Chat", "🔗 그래프 컨텍스트", "📑 리포트"])
+
+    
+# 향상된 입력 영역
+col1, col2 = st.columns([3, 1])
+with col1:
+    c_q = st.text_input(
+        "질의", 
+        value="한화 지상무기 수출 관련 유망 종목은?", 
+        key=wkey("q", "chat"),
+        placeholder="예: 한화 방산 수출 현황, KAI 최근 실적 등"
+    )
+with col2:
+    # 캐시 통계 버튼 (향후 확장용)
+    if ENHANCED_UI_AVAILABLE:
+        show_cache = st.button("📊 캐시 통계", key=wkey("cache_stats", "chat"))
+        if show_cache:
+            display_cache_stats()
+
+# 실행 옵션
+col_run, col_clear = st.columns([1, 1])
+with col_run:
+    c_run = st.button("🚀 질의 실행", key=wkey("run", "chat"), type="primary")
+with col_clear:
+    if st.button("🗑️ 결과 초기화", key=wkey("clear", "chat")):
+        st.rerun()
+
+if c_run:
+    with st.spinner("Context Engineering 시스템이 답변을 생성하고 있습니다..."):
+        try:
+            data = call_chat(c_q)
+            
+            # 성공적인 응답 처리
+            answer = data.get("answer", "")
+            meta = data.get("meta", {})
+            sources = data.get("sources", [])
+            
+            # 향상된 답변 표시 (품질 지표 포함)
+            if ENHANCED_UI_AVAILABLE and meta:
+                enhanced_answer = format_answer_with_quality_indicators(answer, meta)
+                st.markdown(enhanced_answer)
+            else:
+                st.markdown(answer)
+            
+            # 구분선
+            st.divider()
+            
+            # 향상된 메타정보 표시
+            if ENHANCED_UI_AVAILABLE and meta:
+                st.markdown("### 📊 시스템 정보")
+                display_enhanced_meta_info(meta)
+            
+            # 소스 정보 표시 개선
+            if sources:
+                st.markdown("### 📰 참고 소스")
+                for i, source in enumerate(sources[:5], 1):
+                    with st.container():
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            title = source.get("title", "제목 없음")
+                            url = source.get("url", "")
+                            if url:
+                                st.markdown(f"**{i}.** [{title}]({url})")
+                            else:
+                                st.markdown(f"**{i}.** {title}")
+                        with col2:
+                            date = source.get("date", "")
+                            score = source.get("score", 0)
+                            if date:
+                                st.caption(f"📅 {date[:10]}")
+                            if score:
+                                st.caption(f"⭐ {score:.2f}")
+            
+            # 전체 결과 JSON (개발자용)
+            with st.expander("🔍 전체 응답 데이터 (개발자용)", expanded=False):
+                st.json(data)
+            
+        except requests.exceptions.Timeout:
+            st.error("⏰ 요청 시간이 초과되었습니다. 더 간단한 질의로 다시 시도해보세요.")
+        except requests.exceptions.ConnectionError:
+            st.error("🔌 API 서버에 연결할 수 없습니다. API_BASE 설정을 확인해주세요.")
+        except requests.exceptions.HTTPError as he:
+            st.error(f"🚨 API 오류: {he}")
+            if hasattr(he, 'response') and he.response is not None:
+                st.code(he.response.text)
+        except Exception as e:
+            st.error(f"⚠️ 예상치 못한 오류가 발생했습니다:")
+            st.exception(e)
+            
+            # 오류 발생 시 도움말 제공
+            with st.expander("💡 문제 해결 도움말", expanded=True):
+                st.markdown("""
+                **일반적인 해결 방법:**
+                1. API 서버가 실행 중인지 확인
+                2. 사이드바에서 API Base URL 확인
+                3. 네트워크 연결 상태 확인
+                4. 질의를 더 간단하게 수정
+                
+                **추천 질의 예시:**
+                - "한화 최근 뉴스"
+                - "방산 업계 동향" 
+                - "KAI 실적 전망"
+                """)
+
+# 도움말 섹션
+with st.expander("❓ Context Engineering 시스템 도움말", expanded=False):
+    st.markdown("""
+    ### 🚀 향상된 기능들
+    
+    **🔍 지능형 검색**: 다단계 검색 전략으로 더 정확한 결과
+    **💡 동적 인사이트**: LLM 기반 실시간 분석 
+    **📊 개인화**: 질의 유형별 맞춤 응답
+    **⚡ 캐싱**: 빠른 응답 속도
+    **🛡️ 안정성**: 서비스 장애 시에도 기본 응답 제공
+    
+    ### 💭 질의 팁
+    - **구체적인 키워드** 사용 (예: "한화", "KAI", "방산")
+    - **시간 범위** 포함 (예: "최근", "2024년")  
+    - **관심 영역** 명시 (예: "투자", "수출", "실적")
+    """)
+
+# ========== 탭 2: 그래프 컨텍스트 ==========
 with tab_graph:
     st.subheader("그래프 컨텍스트 조회")
-    g_input = query_block("graph", defaults={"q": "한화 지상무기 수주", "limit": 30, "lookback_days": 180})
+    g_input = query_block("graph", defaults={"q": "한화", "limit": 30, "lookback_days": 180})
     
     # 관계 포함 옵션
     include_relationships = st.checkbox("관계(에지) 포함", value=False, key=wkey("include_rels", "graph"))
@@ -236,34 +471,137 @@ LIMIT $limit
                 "lookback_days": g_input["lookback_days"],
                 "limit": g_input["limit"],
             }
+            
+            # API 호출 전 디버그
+            st.info(f"API 호출 파라미터: {params}")
+            
             if cypher_txt.strip():
+                st.info("사용자 정의 Cypher 쿼리 사용")
                 res = call_mcp_query_graph(cypher_txt, params)
             else:
+                st.info("기본 그래프 검색 쿼리 사용")
                 res = call_mcp_query_graph_default(params)
-            if not res or not res.get("ok") or not res.get("data"):
+            if not res or not res.get("ok"):
                 st.error(f"MCP query_graph 실패: {res}")
             else:
                 rows = res.get("data", [])
-                st.success(f"노드 {len(rows)}개 수신")
-                colA, colB = st.columns([1, 1])
-                with colA:
-                    st.json(rows[:5])
-                with colB:
+                if rows:
+                    st.success(f"노드 {len(rows)}개 수신")
+                else:
+                    st.warning("검색 결과가 없습니다. 다른 키워드로 시도해보세요.")
+                    st.info("💡 **추천 키워드**: '한화', '회사', '뉴스' 등으로 시도해보세요.")
+                
+                # API 응답 디버그
+                with st.expander("🔍 API 응답 디버그", expanded=False):
+                    st.write("API 응답 전체:")
+                    st.json(res)
+                
+                # 데이터 타입별로 분류
+                news_data = [r for r in rows if "News" in r.get("labels", [])]
+                event_data = [r for r in rows if "Event" in r.get("labels", [])]
+                company_data = [r for r in rows if "Company" in r.get("labels", [])]
+                other_data = [r for r in rows if not any(label in ["News", "Event", "Company"] for label in r.get("labels", []))]
+                
+                # 디버그 정보 표시
+                with st.expander("🔍 디버그 정보", expanded=False):
+                    st.write(f"전체 데이터 개수: {len(rows)}")
+                    st.write(f"뉴스 데이터 개수: {len(news_data)}")
+                    st.write(f"이벤트 데이터 개수: {len(event_data)}")
+                    st.write(f"회사 데이터 개수: {len(company_data)}")
+                    st.write(f"기타 데이터 개수: {len(other_data)}")
+                    if rows:
+                        st.write("첫 번째 데이터 샘플:")
+                        st.json(rows[0])
+                
+                # 탭으로 데이터 분류 표시
+                tab_news, tab_events, tab_companies, tab_others, tab_graph_viz = st.tabs([
+                    f"📰 뉴스 ({len(news_data)})", 
+                    f"📅 이벤트 ({len(event_data)})", 
+                    f"🏢 회사 ({len(company_data)})", 
+                    f"🔗 기타 ({len(other_data)})",
+                    "🎨 그래프"
+                ])
+                
+                # 뉴스 탭
+                with tab_news:
+                    if news_data:
+                        st.subheader("연관 뉴스")
+                        for i, news in enumerate(news_data[:10]):  # 최대 10개 표시
+                            n = news.get("n", {})
+                            url = n.get("url", "")
+                            article_id = n.get("articleId", "")
+                            last_seen = n.get("lastSeenAt", "")
+                            
+                            with st.container():
+                                col1, col2 = st.columns([3, 1])
+                                with col1:
+                                    if url:
+                                        st.markdown(f"**뉴스 {i+1}**: [{url}]({url})")
+                                    else:
+                                        st.markdown(f"**뉴스 {i+1}**: Article ID {article_id}")
+                                with col2:
+                                    if last_seen:
+                                        st.caption(f"발견: {last_seen[:10]}")
+                                st.divider()
+                    else:
+                        st.info("연관 뉴스가 없습니다.")
+                
+                # 이벤트 탭
+                with tab_events:
+                    if event_data:
+                        st.subheader("관련 이벤트")
+                        for i, event in enumerate(event_data[:10]):
+                            n = event.get("n", {})
+                            title = n.get("title", "제목 없음")
+                            event_type = n.get("event_type", "")
+                            published_at = n.get("published_at", "")
+                            
+                            with st.container():
+                                st.markdown(f"**{i+1}. {title}**")
+                                if event_type:
+                                    st.caption(f"유형: {event_type}")
+                                if published_at:
+                                    st.caption(f"발행일: {published_at}")
+                                st.divider()
+                    else:
+                        st.info("관련 이벤트가 없습니다.")
+                
+                # 회사 탭
+                with tab_companies:
+                    if company_data:
+                        st.subheader("관련 회사")
+                        for i, company in enumerate(company_data[:10]):
+                            n = company.get("n", {})
+                            name = n.get("name", "이름 없음")
+                            ticker = n.get("ticker", "")
+                            
+                            with st.container():
+                                st.markdown(f"**{i+1}. {name}**")
+                                if ticker:
+                                    st.caption(f"티커: {ticker}")
+                                st.divider()
+                    else:
+                        st.info("관련 회사가 없습니다.")
+                
+                # 기타 탭
+                with tab_others:
+                    if other_data:
+                        st.subheader("기타 데이터")
+                        for i, item in enumerate(other_data[:10]):
+                            n = item.get("n", {})
+                            labels = item.get("labels", [])
+                            title = n.get("title") or n.get("name") or n.get("contractId") or "제목 없음"
+                            
+                            with st.container():
+                                st.markdown(f"**{i+1}. {title}**")
+                                st.caption(f"타입: {', '.join(labels)}")
+                                st.divider()
+                    else:
+                        st.info("기타 데이터가 없습니다.")
+                
+                # 그래프 탭
+                with tab_graph_viz:
                     render_pyvis_graph(rows, key_prefix="graph")
-        except Exception as e:
-            st.exception(e)
-
-# ========== 탭 2: Chat ==========
-with tab_chat:
-    st.subheader("질의 → 뉴스/그래프/주가 스냅샷")
-    c_q = st.text_input("질의", value="KAI 방산 수주 컨텍스트 알려줘 005930.KS", key=wkey("q", "chat"))
-    c_run = st.button("질의 실행", key=wkey("run", "chat"))
-    if c_run:
-        try:
-            data = call_chat(c_q)
-            st.markdown(data.get("answer", ""))
-            with st.expander("메타/소스 보기"):
-                st.json(data)
         except Exception as e:
             st.exception(e)
 
