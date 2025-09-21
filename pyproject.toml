@@ -28,4 +28,5 @@ dependencies = [
     "asyncpg>=0.29.0",
     "aiomysql>=0.2.0",
     "langchain-community>=0.3.29",
+    "mcp>=1.0.0",
 ]

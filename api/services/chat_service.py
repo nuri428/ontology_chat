@@ -247,8 +247,8 @@ class ChatService:
         self.neo = Neo4jMCP()
         self.st = StockMCP()
         # OpenSearchTool 인스턴스 추가 (임베딩 기능 사용)
-        from api.mcp.tools import OpenSearchTool
-        self.os_tool = OpenSearchTool(self.os)
+        # from api.mcp.tools import OpenSearchTool  # 임시 비활성화
+        # self.os_tool = OpenSearchTool(self.os)
 
     async def _get_context_keywords(self, query: str) -> str:
         """LLM을 통한 동적 키워드 추출 및 확장"""

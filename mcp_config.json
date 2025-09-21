@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "ontology-chat": {
+      "command": "uvicorn",
+      "args": [
+        "api.main:app",
+        "--host", "127.0.0.1",
+        "--port", "8000"
+      ],
+      "env": {
+        "PYTHONPATH": "/data/dev/git/ontology_chat:/home/nuri/.local/lib/python3.10/site-packages"
+      },
+      "cwd": "/data/dev/git/ontology_chat",
+      "description": "Ontology Chat FastAPI-MCP Server - 온톨로지 기반 챗봇 및 리포트 생성 서비스",
+      "notes": [
+        "MCP endpoints available at:",
+        "- SSE: /mcp/sse",
+        "- HTTP: /mcp/http",
+        "All FastAPI endpoints automatically become MCP tools"
+      ]
+    }
+  }
+}

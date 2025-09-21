@@ -1,6 +1,9 @@
 # src/ontolog_chat/main.py
 import json
+import sys
+sys.path.insert(0, '/home/nuri/.local/lib/python3.10/site-packages')
 from fastapi import Body, Depends, FastAPI, HTTPException
+from fastapi_mcp import FastApiMCP
 from api.logging import setup_logging
 from api.config import settings
 from api.routers import health
@@ -18,6 +21,17 @@ from typing import List, Optional
 
 logger = setup_logging()
 app = FastAPI(title="ontolog_chat", version="0.1.0")
+
+# FastAPI-MCP 통합
+mcp = FastApiMCP(
+    fastapi=app,
+    name="ontology-chat",
+    description="Ontology Chat API with MCP support"
+)
+
+# MCP 엔드포인트 마운트
+mcp.mount_sse(app, mount_path="/mcp/sse")
+mcp.mount_http(app, mount_path="/mcp/http")
 
 app.include_router(health.router)
 app.include_router(mcp_router.router)  # ← 추가
@@ -47,6 +61,15 @@ def get_langgraph_engine() -> LangGraphReportEngine:
 
 @app.post("/chat")
 async def chat(query: str = Body(..., embed=True)):
+    """
+    온톨로지 기반 챗봇과 대화합니다.
+
+    Args:
+        query: 사용자 질문
+
+    Returns:
+        답변 및 관련 정보
+    """
     result = await chat_service.generate_answer(query)
     return result
 
@@ -55,6 +78,15 @@ async def chat(query: str = Body(..., embed=True)):
 async def create_report(
     req: ReportRequest, service: ReportService = Depends(get_report_service)
 ):
+    """
+    도메인별 분석 리포트를 생성합니다.
+
+    Args:
+        req: 리포트 요청 정보 (query, domain, lookback_days 등)
+
+    Returns:
+        마크다운 형식의 리포트와 분석 메트릭
+    """
     try:
         out = await service.generate_report(
             query=req.query,
@@ -118,7 +150,17 @@ async def create_comparative_report(
     lookback_days: int = Body(180),
     service: ReportService = Depends(get_report_service)
 ):
-    """비교 분석 리포트 생성 - 여러 키워드를 동시에 비교 분석"""
+    """
+    비교 분석 리포트 생성 - 여러 키워드를 동시에 비교 분석
+
+    Args:
+        queries: 비교할 질의들 (2-5개)
+        domain: 도메인 (optional)
+        lookback_days: 분석 기간 (일)
+
+    Returns:
+        비교 분석 결과
+    """
     try:
         if len(queries) < 2:
             raise HTTPException(status_code=400, detail="비교를 위해 최소 2개 이상의 질의가 필요합니다")
@@ -586,7 +628,12 @@ async def root():
 
 @app.get("/api/themes")
 async def get_market_themes():
-    """시장 주요 테마 목록 조회"""
+    """
+    시장 주요 테마 목록을 조회합니다.
+
+    Returns:
+        테마별 종목 정보 및 성과
+    """
     try:
         themes = await stock_data_service.get_market_themes()
         return {
@@ -616,7 +663,16 @@ async def get_market_themes():
 
 @app.get("/api/stocks/search")
 async def search_stocks(query: str, limit: int = 10):
-    """종목 검색"""
+    """
+    종목을 검색합니다.
+
+    Args:
+        query: 검색어
+        limit: 결과 수 제한 (기본값: 10)
+
+    Returns:
+        종목 목록 (이름, 심볼, 섹터, 가격 등)
+    """
     try:
         stocks = await stock_data_service.search_stocks_by_query(query, limit)
         return {
