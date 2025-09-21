@@ -26,6 +26,8 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       # 로깅 설정
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://192.168.0.11:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:8b-q8_0}
     networks:
       - ontology-network
     restart: unless-stopped

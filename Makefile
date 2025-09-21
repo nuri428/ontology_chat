@@ -26,6 +26,14 @@ docker-up:
 docker-down:
 	docker-compose down
 
+
+docker-dev-rebuild:
+	docker-compose -f docker-compose.dev.yml down
+	docker-compose -f docker-compose.dev.yml up -d --build
+
+docker-dev-restart:
+	docker-compose -f docker-compose.dev.yml restart
+
 docker-dev-up:
 	docker-compose -f docker-compose.dev.yml up -d --build
 
