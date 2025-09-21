@@ -25,7 +25,7 @@ def _ts_to_dt(ts_obj: dict | None) -> datetime:
 
 def _label(labels: list[str]) -> str:
     # 다중 라벨 대비: 가장 의미 있는 것 우선
-    priority = ["Event","Contract","Company","News","Weapon","Program","Agency","Country","Evidence"]
+    priority = ["Event","Contract","Company","News","Product","WeaponSystem","Program","Agency","Country","Evidence"]
     for p in priority:
         if p in labels:
             return p

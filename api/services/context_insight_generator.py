@@ -61,23 +61,23 @@ class ContextInsightGenerator:
     ) -> InsightGenerationResult:
         """질의와 검색 결과를 바탕으로 컨텍스트 인사이트 생성"""
         
-        # 캐싱 적용 (30분)
-        if CACHE_AVAILABLE:
-            from api.services.cache_manager import cache_manager
-            
-            # 캐시 키 생성용 간단한 해시
-            cache_key_data = f"{query}_{len(news_hits) if news_hits else 0}_{bool(graph_summary)}_{bool(stock_info)}"
-            cached_result = cache_manager.get("insight_generation", cache_key_data)
-            if cached_result:
-                logger.debug("인사이트 생성 캐시 히트")
-                return cached_result
+        # 캐싱 비활성화
+        # if CACHE_AVAILABLE:
+        #     from api.services.cache_manager import cache_manager
+        #
+        #     # 캐시 키 생성용 간단한 해시
+        #     cache_key_data = f"{query}_{len(news_hits) if news_hits else 0}_{bool(graph_summary)}_{bool(stock_info)}"
+        #     cached_result = cache_manager.get("insight_generation", cache_key_data)
+        #     if cached_result:
+        #         logger.debug("인사이트 생성 캐시 히트")
+        #         return cached_result
         
         # 실제 인사이트 생성
         result = await self._generate_insights_impl(query, news_hits, graph_summary, stock_info)
         
-        # 캐시에 저장 (30분)
-        if CACHE_AVAILABLE and result.confidence > 0.3:
-            cache_manager.set("insight_generation", result, ttl=1800.0, cache_key=cache_key_data)
+        # 캐시 저장 비활성화
+        # if CACHE_AVAILABLE and result.confidence > 0.3:
+        #     cache_manager.set("insight_generation", result, ttl=1800.0, cache_key=cache_key_data)
         
         return result
     
@@ -143,10 +143,10 @@ class ContextInsightGenerator:
 Query: "{query}"
 Context: {context_data}
 
-Generate insights about Korean business trends, focusing on defense industry, exports, and investments.
+Generate insights about Korean business trends, focusing on industry trends, exports, and investments.
 
 Return ONLY valid JSON (no explanations, no markdown):
-{{"insights":[{{"title":"방산 수출 확대","content":"K-방산 수출 증가로 관련 기업들의 성장이 예상됩니다","icon":"🚀","category":"market","confidence":0.8,"sources":["news"]}},{{"title":"정부 지원 정책","content":"방산 수출 지원 정책이 업계 성장을 뒷받침합니다","icon":"🏛️","category":"policy","confidence":0.9,"sources":["policy"]}}],"overall_context":"방산업계 성장세 지속","confidence":0.85,"reasoning":"뉴스와 시장 동향 분석 결과"}}"""
+{{"insights":[{{"title":"산업 성장 전망","content":"관련 산업의 성장과 기술 혁신이 예상됩니다","icon":"🚀","category":"market","confidence":0.8,"sources":["news"]}},{{"title":"정책 지원","content":"산업 육성 정책이 기업 성장을 뒷받침핉니다","icon":"🏛️","category":"policy","confidence":0.9,"sources":["policy"]}}],"overall_context":"산업 성장세 지속","confidence":0.85,"reasoning":"뉴스와 시장 동향 분석 결과"}}"""
 
         try:
             # LLM 호출 (직접 호출)
@@ -239,12 +239,12 @@ Return ONLY valid JSON (no explanations, no markdown):
         insights = []
         
         # 도메인별 기본 인사이트
-        if "지상무기" in q_lower or "방산" in q_lower:
+        if "기술" in q_lower or "혁신" in q_lower:
             insights.append(ContextInsight(
-                title="방산 산업 성장",
-                content="K-방산 수출 증가와 정부 지원 정책으로 국내 방산업계가 성장하고 있습니다.",
-                icon="🔫",
-                category="defense",
+                title="기술 혁신 동향",
+                content="첨단 기술 발전과 디지털 전환으로 산업 경쟁력이 강화되고 있습니다.",
+                icon="💻",
+                category="technology",
                 confidence=0.7
             ))
         

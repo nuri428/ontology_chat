@@ -62,7 +62,7 @@ class PersonalizationEngine:
                 r"분석|현황|상황|전체적"
             ],
             QueryType.COMPANY_INFO: [
-                r"한화|kai|lg|삼성|현대",
+                r"삼성|엘지|lg|sk|현대|네이버|카카오|포스코|에스크|로터스",
                 r"기업|회사|사업|실적|매출",
                 r"ceo|경영진|조직|전략"
             ],
@@ -74,7 +74,7 @@ class PersonalizationEngine:
             QueryType.TECHNICAL_SPEC: [
                 r"기술|스펙|사양|성능|기능",
                 r"개발|연구|특허|혁신",
-                r"k-?\d+|무기체계|플랫폼"
+                r"ai|인공지능|인공지능|반도체|5g|6g"
             ],
             QueryType.POLICY_REGULATION: [
                 r"정책|규제|법률|제도",
@@ -249,8 +249,9 @@ class PersonalizationEngine:
         
         # 기본값: 전문 용어 밀도로 판단
         technical_terms = [
-            "dcf", "pe", "roe", "ebitda", "cagr", "밸류에이션", 
-            "펀더멘털", "기술적 분석", "rsi", "macd"
+            "dcf", "pe", "roe", "ebitda", "cagr", "밸류에이션",
+            "펀더멘털", "기술적 분석", "rsi", "macd",
+            "ai", "인공지능", "반도체", "메모리", "hbm", "전기차", "배터리"
         ]
         
         term_count = sum(1 for term in technical_terms if term in query)
@@ -312,8 +313,8 @@ class PersonalizationEngine:
         
         # 산업 힌트
         industry_patterns = [
-            r"방산|국방|항공|우주",
-            r"반도체|it|바이오|에너지"
+            r"ai|인공지능|기계학습|빅데이터",
+            r"반도체|it|바이오|에너지|전기차|배터리"
         ]
         
         for pattern in industry_patterns:

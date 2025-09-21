@@ -32,7 +32,7 @@ async def test_context_insight_generator():
                     {"title": "방산업체 해외진출 가속화", "url": "test2.com"},
                     {"title": "정부, 방산수출 지원정책 발표", "url": "test3.com"}
                 ],
-                "graph_summary": {"Company": ["한화", "한화시스템"], "Weapon": ["K9자주포", "지상무기"]},
+                "graph_summary": {"Company": ["한화", "한화시스템"], "WeaponSystem": ["K9자주포", "지상무기"]},
                 "stock_info": {"symbol": "272210.KS", "price": "45000"}
             },
             {

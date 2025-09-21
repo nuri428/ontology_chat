@@ -1,14 +1,14 @@
 from __future__ import annotations
 from typing import Any, Dict, List
 from api.logging import setup_logging
-logger = setup_logging()
+
 from opensearchpy import OpenSearch, helpers
 import anyio
 import requests
 import json
 from requests.auth import HTTPBasicAuth
 from api.config import settings
-
+logger = setup_logging()
 class OpenSearchMCP:
     """
     OpenSearch 어댑터 (동기 클라이언트를 비동기에서 사용)
@@ -77,6 +77,7 @@ class OpenSearchMCP:
             if response.status_code == 200:
                 return response.json()
             else:
+                logger.error(f"[OS] search index={index} q={query}")
                 logger.error(f"[OS] search error: {response.status_code} - {response.text}")
                 raise Exception(f"OpenSearch search failed: {response.status_code} - {response.text}")
                 

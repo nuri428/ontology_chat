@@ -76,10 +76,10 @@ class SimpleLLMKeywordExtractor:
 Query: "{query}"
 {domain_context}
 
-Extract search keywords including companies, defense terms, finance terms.
+Extract search keywords including companies, technology terms, finance terms, industry terms.
 
 Return JSON only:
-{{"keywords":["한화","지상무기","수출","방산","종목"],"weighted_keywords":{{"한화":2.5,"지상무기":2.8,"수출":2.0,"방산":2.3,"종목":2.1}},"categories":{{"companies":["한화"],"defense":["지상무기","방산"],"finance":["종목","투자"]}},"confidence":0.9,"reasoning":"키워드 추출 완료"}}"""
+{{"keywords":["기업명","기술","수출","산업","종목"],"weighted_keywords":{{"기업명":2.5,"기술":2.8,"수출":2.0,"산업":2.3,"종목":2.1}},"categories":{{"companies":["기업명"],"technology":["기술","혁신"],"finance":["종목","투자"],"industry":["산업","제조"]}},"confidence":0.9,"reasoning":"키워드 추출 완료"}}"""
         
         return prompt
 

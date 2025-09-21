@@ -1,34 +1,40 @@
 // 새로운 상장사 중심 스키마에 맞춘 그래프 검색 쿼리
-// Params: $q, $limit, $lookback_days (domain은 선택사항)
+// Params: $q, $limit, $lookback_days, $domain (optional)
 WITH $q AS q,
+     coalesce($domain, "")         AS d,
      coalesce($lookback_days, 180) AS lb_days
 WITH [t IN split(toLower(q), " ") WHERE size(t) >= 1] AS toks,
+     [t IN split(toLower(d), " ") WHERE size(t) >= 1] AS domain_toks,
      datetime() - duration({days: lb_days})          AS lookback_ts
 
 // A) 개선된 시드 노드 찾기 - 상장사 중심 3단계 접근법
 // 1단계: 직접 키워드 매칭 (확장된 노드 타입)
-CALL (toks) {
+CALL (toks, domain_toks) {
   UNWIND ['Company','Event','Product','FinancialMetric','Investment','Contract','Program','Agency'] AS L
   MATCH (s)
   WHERE L IN labels(s)
-    AND ANY(t IN toks WHERE ANY(k IN keys(s) WHERE s[k] IS NOT NULL AND toLower(toString(s[k])) CONTAINS t))
+    AND (
+      ANY(t IN toks WHERE ANY(k IN keys(s) WHERE s[k] IS NOT NULL AND toLower(toString(s[k])) CONTAINS t))
+      OR (size(domain_toks) > 0 AND ANY(t IN domain_toks WHERE ANY(k IN keys(s) WHERE s[k] IS NOT NULL AND toLower(toString(s[k])) CONTAINS t)))
+    )
   RETURN collect(DISTINCT s) AS direct_seeds
 }
 
 // 2단계: 상장사 중심 확장 (ticker, sector 포함)
-CALL (toks) {
+CALL (toks, domain_toks) {
   MATCH (c:Company)
-  WHERE ANY(t IN toks WHERE toLower(c.name) CONTAINS t OR toLower(coalesce(c.ticker, "")) CONTAINS t)
+  WHERE c.is_listed = true AND (
+    ANY(t IN toks WHERE toLower(c.name) CONTAINS t OR toLower(coalesce(c.ticker, "")) CONTAINS t)
+    OR (size(domain_toks) > 0 AND ANY(t IN domain_toks WHERE toLower(coalesce(c.sector, "")) CONTAINS t))
+  )
   OPTIONAL MATCH (c)-[*1..2]-(expanded)
   WHERE expanded:Event OR expanded:FinancialMetric OR expanded:Investment OR expanded:Product
   RETURN collect(DISTINCT c) + collect(DISTINCT expanded) AS listed_company_seeds
 }
 
-// 3단계: 이벤트 타입 기반 확장 (모든 산업 포괄)
-CALL (toks) {
-  WITH ['Earnings','Investment','Acquisition','Partnership','IPO','Contract','Export','R&D',
-        'TechDevelopment','ProductLaunch','MarketExpansion','Collaboration','Merger',
-        'Licensing','Patent','Innovation','Sustainability','ESG','Regulatory'] AS priority_events
+// 3단계: 이벤트 타입 기반 확장
+CALL (toks, domain_toks) {
+  WITH ['Earnings','Investment','Acquisition','Partnership','IPO','ContractAward','Export','R&D'] AS priority_events
   UNWIND priority_events AS event_type
   MATCH (e:Event {event_type: event_type})
   WHERE ANY(t IN toks WHERE toLower(e.title) CONTAINS t)
@@ -64,7 +70,7 @@ WITH n,
        ELSE datetime('1970-01-01T00:00:00Z')
      END AS ts,
      CASE
-       WHEN n:Company AND coalesce(n.is_listed, false) = true THEN 10
+       WHEN n:Company AND n.is_listed = true THEN 10
        WHEN n:Event AND n.event_type IN ['Earnings','Investment','Acquisition','IPO'] THEN 8
        WHEN n:FinancialMetric THEN 7
        WHEN n:Investment THEN 6

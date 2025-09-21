@@ -91,7 +91,7 @@ class LLMKeywordExtractor:
     "companies": ["회사명들"],
     "technologies": ["기술용어들"], 
     "finance": ["금융용어들"],
-    "defense": ["방산용어들"],
+    "industry": ["산업용어들"],
     "regions": ["지역명들"],
     "time": ["시간용어들"]
   }},

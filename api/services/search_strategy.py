@@ -36,20 +36,25 @@ class AdvancedSearchEngine:
         self.domain_patterns = self._build_domain_patterns()
         
     def _build_search_strategies(self) -> Dict[str, List[SearchStrategy]]:
-        """도메인별 검색 전략 구성"""
+        """도메인별 검색 전략 구성 - 범용 주식 분석"""
         return {
-            "defense": [
-                SearchStrategy("exact_match", "{keywords}", 1.0, 1),
-                SearchStrategy("expanded_defense", "{keywords} 방산 국방 무기", 0.8, 2),
-                SearchStrategy("company_focus", "{company_names} 방산", 0.9, 3),
-                SearchStrategy("broad_defense", "방산 OR 국방 OR 무기 OR 지상무기", 0.6, 4),
-                SearchStrategy("policy_context", "방산 정책 OR 국방 정책 OR 무기 수출", 0.7, 5)
+            "technology": [
+                SearchStrategy("tech_direct", "{keywords} 기술 개발", 1.0, 1),
+                SearchStrategy("tech_trend", "{keywords} 기술 동향 전망", 0.9, 2),
+                SearchStrategy("innovation", "{keywords} 혁신 R&D", 0.8, 3),
+                SearchStrategy("tech_market", "기술 OR 혁신 OR 개발 OR R&D", 0.6, 4)
             ],
-            "export": [
-                SearchStrategy("export_direct", "{keywords} 수출", 1.0, 1),
-                SearchStrategy("trade_context", "{keywords} 해외 진출 무역", 0.8, 2),
-                SearchStrategy("global_market", "{keywords} 글로벌 시장", 0.7, 3),
-                SearchStrategy("overseas_expansion", "해외 OR 수출 OR 글로벌 OR 진출", 0.6, 4)
+            "energy": [
+                SearchStrategy("energy_direct", "{keywords} 에너지 신재생", 1.0, 1),
+                SearchStrategy("battery_focus", "{keywords} 배터리 2차전지", 0.9, 2),
+                SearchStrategy("renewable", "{keywords} 태양광 풍력 원자력", 0.8, 3),
+                SearchStrategy("energy_market", "에너지 OR 배터리 OR 신재생 OR 원자력", 0.6, 4)
+            ],
+            "semiconductor": [
+                SearchStrategy("chip_direct", "{keywords} 반도체 칩", 1.0, 1),
+                SearchStrategy("memory_focus", "{keywords} 메모리 시스템반도체", 0.9, 2),
+                SearchStrategy("ai_chip", "{keywords} AI칩 HBM", 0.8, 3),
+                SearchStrategy("semi_market", "반도체 OR 메모리 OR 칩 OR AI", 0.7, 4)
             ],
             "finance": [
                 SearchStrategy("stock_direct", "{keywords} 주식 종목", 1.0, 1),
@@ -58,10 +63,16 @@ class AdvancedSearchEngine:
                 SearchStrategy("financial_news", "실적 OR 주가 OR 투자 OR 종목", 0.6, 4)
             ],
             "company": [
-                SearchStrategy("company_direct", "{company_names}", 1.0, 1),
-                SearchStrategy("company_business", "{company_names} 사업 실적", 0.9, 2),
-                SearchStrategy("company_news", "{company_names} 뉴스", 0.8, 3),
+                SearchStrategy("company_direct", "{company_names} 뉴스 최신", 1.0, 1),
+                SearchStrategy("company_business", "{company_names} 사업 실적 발표", 0.9, 2),
+                SearchStrategy("company_news", "{company_names} 최신 소식", 0.8, 3),
                 SearchStrategy("industry_context", "{company_names} 업계 동향", 0.7, 4)
+            ],
+            "automotive": [
+                SearchStrategy("auto_direct", "{keywords} 자동차 전기차", 1.0, 1),
+                SearchStrategy("ev_focus", "{keywords} 전기차 자율주행", 0.9, 2),
+                SearchStrategy("mobility", "{keywords} 모빌리티 미래차", 0.8, 3),
+                SearchStrategy("auto_market", "자동차 OR 전기차 OR 모빌리티", 0.7, 4)
             ],
             "general": [
                 SearchStrategy("keyword_match", "{keywords}", 1.0, 1),
@@ -72,14 +83,19 @@ class AdvancedSearchEngine:
         }
     
     def _build_domain_patterns(self) -> Dict[str, List[str]]:
-        """도메인 감지 패턴"""
+        """도메인 감지 패턴 - 범용 주식 분석"""
         return {
-            "defense": ["방산", "국방", "무기", "지상무기", "전차", "자주포", "장갑차", "미사일", "총기"],
-            "export": ["수출", "해외", "글로벌", "진출", "국외", "무역", "export"],
-            "finance": ["주식", "종목", "투자", "실적", "주가", "시장", "상장", "배당"],
-            "company": ["한화", "kai", "카이", "lg", "삼성", "현대", "기업", "회사"],
-            "policy": ["정책", "정부", "지원", "규제", "법안", "제도"],
-            "technology": ["기술", "개발", "연구", "혁신", "특허", "r&d"]
+            "technology": ["기술", "개발", "연구", "혁신", "특허", "r&d", "AI", "IoT", "5G", "6G"],
+            "energy": ["에너지", "배터리", "2차전지", "태양광", "풍력", "원자력", "SMR", "ESS", "신재생"],
+            "semiconductor": ["반도체", "메모리", "시스템반도체", "칩", "AI칩", "HBM", "D램", "낸드플래시"],
+            "finance": ["주식", "종목", "투자", "실적", "주가", "시장", "상장", "배당", "금융", "은행"],
+            "company": ["삼성", "LG", "SK", "현대", "포스코", "네이버", "카카오", "기업", "회사", "상장사"],
+            "automotive": ["자동차", "전기차", "자율주행", "모빌리티", "미래차", "부품", "완성차"],
+            "biotech": ["바이오", "제약", "의료", "헬스케어", "신약", "치료제", "백신"],
+            "chemical": ["화학", "정유", "석유화학", "플라스틱", "소재", "화섬"],
+            "construction": ["건설", "부동산", "인프라", "토목", "스마트시티"],
+            "entertainment": ["게임", "엔터", "콘텐츠", "미디어", "방송", "영화"],
+            "telecom": ["통신", "5G", "6G", "네트워크", "인프라", "텔레콤"]
         }
     
     def detect_query_domain(self, query: str) -> List[str]:
@@ -106,19 +122,21 @@ class AdvancedSearchEngine:
             "time_expressions": []
         }
         
-        # 회사명 추출
+        # 회사명 추출 (일반적인 패턴)
         company_patterns = [
-            r"한화[가-힣]*", r"KAI|카이", r"LG[가-힣]*", 
-            r"삼성[가-힣]*", r"현대[가-힣]*", r"LIG[가-힣]*"
+            r"[A-Z]{2,}[가-힣]*",  # 영문 약어 + 한글
+            r"[가-힣]+전자", r"[가-힣]+중공업", r"[가-힣]+화학",
+            r"[가-힣]+에너지", r"[가-힣]+건설", r"[가-힣]+그룹"
         ]
         for pattern in company_patterns:
             matches = re.findall(pattern, query, re.IGNORECASE)
             entities["companies"].extend(matches)
         
-        # 제품/무기 체계 추출
+        # 제품/시스템 추출 (일반적인 패턴)
         product_patterns = [
-            r"K-?\d+[가-힣]*", r"[가-힣]*자주포", r"[가-힣]*전투기", 
-            r"[가-힣]*미사일", r"[가-힣]*전차"
+            r"[A-Z]-?\d+[가-힣]*",  # 모델명 패턴
+            r"[가-힣]+시스템", r"[가-힣]+솔루션",
+            r"[가-힣]+플랫폼", r"[가-힣]+서비스"
         ]
         for pattern in product_patterns:
             matches = re.findall(pattern, query)
@@ -199,8 +217,8 @@ class AdvancedSearchEngine:
         """도메인별 키워드 확장"""
         expansion_map = {
             "defense": {
-                "방산": ["국방", "군사", "무기", "방위산업"],
-                "무기": ["장비", "시스템", "체계", "병기"],
+                "산업": ["제조", "생산", "기술", "혁신"],
+                "제품": ["장비", "시스템", "솔루션", "플랫폼"],
                 "수출": ["해외진출", "글로벌", "국외판매"]
             },
             "export": {
@@ -225,8 +243,8 @@ class AdvancedSearchEngine:
     def _extract_core_terms(self, keywords: List[str]) -> List[str]:
         """핵심 용어만 추출"""
         high_priority_terms = [
-            "한화", "방산", "무기", "수출", "종목", "투자", 
-            "kai", "지상무기", "전투기", "실적"
+            "기업", "산업", "제품", "수출", "종목", "투자",
+            "기술", "시스템", "성장", "실적"
         ]
         
         core_terms = []

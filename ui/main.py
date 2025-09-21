@@ -8,13 +8,27 @@ from typing import Any, Dict, List
 # Enhanced UI components
 try:
     from components import (
-        display_enhanced_meta_info, 
+        display_enhanced_meta_info,
         format_answer_with_quality_indicators,
         display_cache_stats
     )
     ENHANCED_UI_AVAILABLE = True
 except ImportError:
     ENHANCED_UI_AVAILABLE = False
+
+# New schema enhanced components
+try:
+    from enhanced_components import (
+        display_listed_company_info,
+        display_financial_summary,
+        display_investment_summary,
+        display_enhanced_graph_metrics,
+        create_financial_dashboard,
+        display_quality_indicators
+    )
+    SCHEMA_ENHANCED_UI_AVAILABLE = True
+except ImportError:
+    SCHEMA_ENHANCED_UI_AVAILABLE = False
 
 # --------- 기본 설정 ---------
 st.set_page_config(
@@ -30,7 +44,8 @@ def wkey(name: str, prefix: str) -> str:
     return f"{prefix}__{name}"
 
 def api_base_default() -> str:
-    return os.getenv("API_BASE", "http://greennuri.info:8000")
+    # Docker 환경에서는 API_BASE_URL, 로컬에서는 API_BASE 사용
+    return os.getenv("API_BASE_URL") or os.getenv("API_BASE", "http://localhost:8000")
 
 
 def call_mcp_query_graph_default(params: dict) -> dict:
@@ -43,10 +58,11 @@ def call_mcp_query_graph_default(params: dict) -> dict:
 # --------- 사이드바: 공통 설정 ----------
 st.sidebar.header("설정")
 API_BASE = st.sidebar.text_input("API Base", value=api_base_default(), key=wkey("api_base", "sidebar"))
-timeout = st.sidebar.number_input("API Timeout (s)", value=15, min_value=3, max_value=120, step=1, key=wkey("timeout", "sidebar"))
+timeout = st.sidebar.number_input("API Timeout (s)", value=30, min_value=3, max_value=300, step=5, key=wkey("timeout", "sidebar"))
 
 st.sidebar.markdown("---")
 st.sidebar.caption("※ 백엔드(FastAPI) URL이 다르면 여기서 바꿔주세요.")
+st.sidebar.info("💡 서버 응답 없으면: 타임아웃을 60초 이상으로 설정해보세요")
 
 # --------- 공통: 입력 블록 ----------
 def query_block(key_prefix: str, defaults: Dict[str, Any] | None = None) -> Dict[str, Any]:
@@ -55,14 +71,15 @@ def query_block(key_prefix: str, defaults: Dict[str, Any] | None = None) -> Dict
         "질의",
         value=defaults.get("q", ""),
         key=wkey("q", key_prefix),
-        placeholder="예) 한화 지상무기 수주 / KAI 수주 / 005930.KS ..."
+        placeholder="예) 삼성전자 / LG에너지솔루션 / SK하이닉스 / 005930.KS ..."
     )
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         domain = st.text_input(
             "도메인(선택)",
-            value=defaults.get("domain", "지상무기 전차 자주포 장갑차"),
+            value=defaults.get("domain", "상장사 투자 실적"),
             key=wkey("domain", key_prefix),
+            help="새 스키마: 상장사 중심 분석 지원 - 투자, 실적, 재무지표 등"
         )
     with col2:
         lookback = st.number_input(
@@ -100,9 +117,81 @@ def call_mcp_query_graph(cypher: str|None, params: dict) -> dict:
     return resp.json()
 
 def call_report(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """리포트 전용 API가 있다면 사용. 없으면 주석 참고."""
+    """기본 리포트 API 호출"""
     url = f"{API_BASE}/report"
     resp = requests.post(url, json=payload, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
+
+def call_comparative_report(queries: List[str], domain: str = None, lookback_days: int = 180) -> Dict[str, Any]:
+    """비교 분석 리포트 API 호출"""
+    url = f"{API_BASE}/report/comparative"
+    payload = {
+        "queries": queries,
+        "domain": domain,
+        "lookback_days": lookback_days
+    }
+    resp = requests.post(url, json=payload, timeout=timeout*2)  # 비교 분석은 시간이 더 걸림
+    resp.raise_for_status()
+    return resp.json()
+
+def call_trend_report(query: str, domain: str = None, periods: List[int] = [30, 90, 180]) -> Dict[str, Any]:
+    """트렌드 분석 리포트 API 호출"""
+    url = f"{API_BASE}/report/trend"
+    payload = {
+        "query": query,
+        "domain": domain,
+        "periods": periods
+    }
+    resp = requests.post(url, json=payload, timeout=timeout*2)  # 트렌드 분석은 시간이 더 걸림
+    resp.raise_for_status()
+    return resp.json()
+
+def call_executive_report(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """경영진 요약 리포트 API 호출"""
+    url = f"{API_BASE}/report/executive"
+    resp = requests.post(url, json=payload, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
+
+def call_langgraph_report(payload: Dict[str, Any], analysis_depth: str = "standard") -> Dict[str, Any]:
+    """LangGraph 기반 고급 리포트 API 호출"""
+    url = f"{API_BASE}/report/langgraph"
+    payload_with_depth = {**payload, "analysis_depth": analysis_depth}
+    resp = requests.post(url, json=payload_with_depth, timeout=timeout*3)  # LangGraph는 시간이 더 걸림
+    resp.raise_for_status()
+    return resp.json()
+
+def call_langgraph_comparative_report(queries: List[str], domain: str = None, lookback_days: int = 180, analysis_depth: str = "standard") -> Dict[str, Any]:
+    """LangGraph 기반 비교 분석 리포트 API 호출"""
+    url = f"{API_BASE}/report/langgraph/comparative"
+    payload = {
+        "queries": queries,
+        "domain": domain,
+        "lookback_days": lookback_days,
+        "analysis_depth": analysis_depth
+    }
+    resp = requests.post(url, json=payload, timeout=timeout*5)  # 비교 분석은 더 오래 걸림
+    resp.raise_for_status()
+    return resp.json()
+
+def call_langgraph_trend_report(query: str, domain: str = None, periods: List[int] = [30, 90, 180], analysis_depth: str = "standard") -> Dict[str, Any]:
+    """LangGraph 기반 트렌드 분석 리포트 API 호출"""
+    url = f"{API_BASE}/report/langgraph/trend"
+    payload = {
+        "query": query,
+        "domain": domain,
+        "periods": periods,
+        "analysis_depth": analysis_depth
+    }
+    resp = requests.post(url, json=payload, timeout=timeout*4)  # 트렌드 분석도 오래 걸림
+    resp.raise_for_status()
+    return resp.json()
+
+def call_forecast_report(params: dict) -> dict:
+    """새로운 전망 리포트 API 호출"""
+    url = f"{API_BASE}/forecast_report"
+    resp = requests.post(url, json=params, timeout=timeout*2)  # 리포트 생성에 시간이 걸릴 수 있음
     resp.raise_for_status()
     return resp.json()
 
@@ -209,7 +298,7 @@ def render_pyvis_graph(items: List[Dict[str, Any]], height: str = "680px", key_p
                 color = "#98FB98"  # 연두색
             elif "Contract" in labels:
                 color = "#DDA0DD"  # 자주색
-            elif "Weapon" in labels:
+            elif "Product" in labels or "WeaponSystem" in labels:
                 color = "#F0E68C"  # 카키색
             
             tooltip = f"<b>{title}</b><br/>labels={labels}<br/>" + "<br/>".join(f"{k}: {v}" for k, v in n.items() if k not in ("elementId", "_generated_id"))
@@ -313,129 +402,215 @@ st.divider()
 # --------- 탭 구성 ----------
 tab_chat, tab_graph, tab_report = st.tabs(["💬 Enhanced Chat", "🔗 그래프 컨텍스트", "📑 리포트"])
 
-    
-# 향상된 입력 영역
-col1, col2 = st.columns([3, 1])
-with col1:
-    c_q = st.text_input(
-        "질의", 
-        value="한화 지상무기 수출 관련 유망 종목은?", 
-        key=wkey("q", "chat"),
-        placeholder="예: 한화 방산 수출 현황, KAI 최근 실적 등"
-    )
-with col2:
-    # 캐시 통계 버튼 (향후 확장용)
-    if ENHANCED_UI_AVAILABLE:
-        show_cache = st.button("📊 캐시 통계", key=wkey("cache_stats", "chat"))
-        if show_cache:
-            display_cache_stats()
+# ========== 탭 1: Enhanced Chat ==========
+with tab_chat:
+    # 향상된 입력 영역
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        c_q = st.text_input(
+            "질의",
+            value="",
+            key=wkey("q", "chat"),
+            placeholder="예: SMR 관련 유망 종목은?, 2차전지 최신 동향, 반도체 시장 전망 등"
+        )
+    with col2:
+        # 캐시 통계 버튼 (향후 확장용)
+        if ENHANCED_UI_AVAILABLE:
+            show_cache = st.button("📊 캐시 통계", key=wkey("cache_stats", "chat"))
+            if show_cache:
+                display_cache_stats()
 
-# 실행 옵션
-col_run, col_clear = st.columns([1, 1])
-with col_run:
-    c_run = st.button("🚀 질의 실행", key=wkey("run", "chat"), type="primary")
-with col_clear:
-    if st.button("🗑️ 결과 초기화", key=wkey("clear", "chat")):
-        st.rerun()
+    # 실행 옵션
+    col_run, col_clear = st.columns([1, 1])
+    with col_run:
+        c_run = st.button("🚀 질의 실행", key=wkey("run", "chat"), type="primary")
+    with col_clear:
+        if st.button("🗑️ 결과 초기화", key=wkey("clear", "chat")):
+            st.rerun()
 
-if c_run:
-    with st.spinner("Context Engineering 시스템이 답변을 생성하고 있습니다..."):
-        try:
-            data = call_chat(c_q)
-            
-            # 성공적인 응답 처리
-            answer = data.get("answer", "")
-            meta = data.get("meta", {})
-            sources = data.get("sources", [])
-            
-            # 향상된 답변 표시 (품질 지표 포함)
-            if ENHANCED_UI_AVAILABLE and meta:
-                enhanced_answer = format_answer_with_quality_indicators(answer, meta)
-                st.markdown(enhanced_answer)
-            else:
-                st.markdown(answer)
-            
-            # 구분선
-            st.divider()
-            
-            # 향상된 메타정보 표시
-            if ENHANCED_UI_AVAILABLE and meta:
-                st.markdown("### 📊 시스템 정보")
-                display_enhanced_meta_info(meta)
-            
-            # 소스 정보 표시 개선
-            if sources:
-                st.markdown("### 📰 참고 소스")
-                for i, source in enumerate(sources[:5], 1):
-                    with st.container():
-                        col1, col2 = st.columns([3, 1])
-                        with col1:
+    if c_run:
+        with st.spinner("Context Engineering 시스템이 답변을 생성하고 있습니다..."):
+            try:
+                data = call_chat(c_q)
+
+                # 성공적인 응답 처리
+                answer = data.get("answer", "")
+                meta = data.get("meta", {})
+                sources = data.get("sources", [])
+
+                # 향상된 답변 표시 (품질 지표 포함)
+                if ENHANCED_UI_AVAILABLE and meta:
+                    enhanced_answer = format_answer_with_quality_indicators(answer, meta)
+                    st.markdown(enhanced_answer)
+                else:
+                    st.markdown(answer)
+
+                # 구분선
+                st.divider()
+
+                # 향상된 메타정보 표시
+                if ENHANCED_UI_AVAILABLE and meta:
+                    st.markdown("### 📊 시스템 정보")
+                    display_enhanced_meta_info(meta)
+
+                # 소스 정보 표시 개선 - 표 형식 추가
+                if sources:
+                    st.markdown("### 📰 참고 소스")
+
+                    # 표시 방식 선택
+                    col_view, col_export = st.columns([2, 1])
+                    with col_view:
+                        view_mode = st.radio(
+                            "표시 방식",
+                            ["표 형식", "리스트 형식"],
+                            horizontal=True,
+                            key=wkey("view_mode", "chat_sources")
+                        )
+
+                    if view_mode == "표 형식":
+                        # 표 형식으로 표시 - Streamlit 네이티브 방식
+                        import pandas as pd
+
+                        # 데이터프레임 생성
+                        news_data = []
+                        for i, source in enumerate(sources[:10], 1):  # 최대 10개까지
                             title = source.get("title", "제목 없음")
                             url = source.get("url", "")
-                            if url:
-                                st.markdown(f"**{i}.** [{title}]({url})")
-                            else:
-                                st.markdown(f"**{i}.** {title}")
-                        with col2:
                             date = source.get("date", "")
                             score = source.get("score", 0)
-                            if date:
-                                st.caption(f"📅 {date[:10]}")
-                            if score:
-                                st.caption(f"⭐ {score:.2f}")
-            
-            # 전체 결과 JSON (개발자용)
-            with st.expander("🔍 전체 응답 데이터 (개발자용)", expanded=False):
-                st.json(data)
-            
-        except requests.exceptions.Timeout:
-            st.error("⏰ 요청 시간이 초과되었습니다. 더 간단한 질의로 다시 시도해보세요.")
-        except requests.exceptions.ConnectionError:
-            st.error("🔌 API 서버에 연결할 수 없습니다. API_BASE 설정을 확인해주세요.")
-        except requests.exceptions.HTTPError as he:
-            st.error(f"🚨 API 오류: {he}")
-            if hasattr(he, 'response') and he.response is not None:
-                st.code(he.response.text)
-        except Exception as e:
-            st.error(f"⚠️ 예상치 못한 오류가 발생했습니다:")
-            st.exception(e)
-            
-            # 오류 발생 시 도움말 제공
-            with st.expander("💡 문제 해결 도움말", expanded=True):
-                st.markdown("""
-                **일반적인 해결 방법:**
-                1. API 서버가 실행 중인지 확인
-                2. 사이드바에서 API Base URL 확인
-                3. 네트워크 연결 상태 확인
-                4. 질의를 더 간단하게 수정
-                
-                **추천 질의 예시:**
-                - "한화 최근 뉴스"
-                - "방산 업계 동향" 
-                - "KAI 실적 전망"
-                """)
 
-# 도움말 섹션
-with st.expander("❓ Context Engineering 시스템 도움말", expanded=False):
-    st.markdown("""
-    ### 🚀 향상된 기능들
-    
-    **🔍 지능형 검색**: 다단계 검색 전략으로 더 정확한 결과
-    **💡 동적 인사이트**: LLM 기반 실시간 분석 
-    **📊 개인화**: 질의 유형별 맞춤 응답
-    **⚡ 캐싱**: 빠른 응답 속도
-    **🛡️ 안정성**: 서비스 장애 시에도 기본 응답 제공
-    
-    ### 💭 질의 팁
-    - **구체적인 키워드** 사용 (예: "한화", "KAI", "방산")
-    - **시간 범위** 포함 (예: "최근", "2024년")  
-    - **관심 영역** 명시 (예: "투자", "수출", "실적")
-    """)
+                            # 제목 길이 제한
+                            if len(title) > 60:
+                                title = title[:57] + "..."
+
+                            news_data.append({
+                                "순번": i,
+                                "제목": title,
+                                "날짜": date[:10] if date else "-",
+                                "점수": f"{score:.2f}" if score else "-",
+                                "URL": url if url else "-"
+                            })
+
+                        df = pd.DataFrame(news_data)
+
+                        # Streamlit 데이터프레임으로 표시 (컬럼 설정 포함)
+                        st.dataframe(
+                            df,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "순번": st.column_config.NumberColumn(
+                                    "순번",
+                                    width="small",
+                                    format="%d"
+                                ),
+                                "제목": st.column_config.TextColumn(
+                                    "제목",
+                                    width="large",
+                                    help="뉴스 제목"
+                                ),
+                                "날짜": st.column_config.DateColumn(
+                                    "발행일",
+                                    width="medium",
+                                    format="YYYY-MM-DD"
+                                ),
+                                "점수": st.column_config.NumberColumn(
+                                    "관련도",
+                                    width="small",
+                                    format="%.2f"
+                                ),
+                                "URL": st.column_config.LinkColumn(
+                                    "링크",
+                                    width="medium",
+                                    help="뉴스 원문 링크",
+                                    display_text="🔗 원문보기"
+                                )
+                            }
+                        )
+
+                        # CSV 다운로드 버튼
+                        csv = df.to_csv(index=False, encoding='utf-8-sig')
+                        st.download_button(
+                            label="📄 CSV로 다운로드",
+                            data=csv,
+                            file_name="news_sources.csv",
+                            mime="text/csv",
+                            key=wkey("download_csv", "chat_sources")
+                        )
+
+                    else:
+                        # 기존 리스트 형식
+                        for i, source in enumerate(sources[:5], 1):
+                            with st.container():
+                                col1, col2 = st.columns([3, 1])
+                                with col1:
+                                    title = source.get("title", "제목 없음")
+                                    url = source.get("url", "")
+                                    if url:
+                                        st.markdown(f"**{i}.** [{title}]({url})")
+                                    else:
+                                        st.markdown(f"**{i}.** {title}")
+                                with col2:
+                                    date = source.get("date", "")
+                                    score = source.get("score", 0)
+                                    if date:
+                                        st.caption(f"📅 {date[:10]}")
+                                    if score:
+                                        st.caption(f"⭐ {score:.2f}")
+
+                # 전체 결과 JSON (개발자용)
+                with st.expander("🔍 전체 응답 데이터 (개발자용)", expanded=False):
+                    st.json(data)
+
+            except requests.exceptions.Timeout:
+                st.error("⏰ 요청 시간이 초과되었습니다. 더 간단한 질의로 다시 시도해보세요.")
+            except requests.exceptions.ConnectionError:
+                st.error("🔌 API 서버에 연결할 수 없습니다. API_BASE 설정을 확인해주세요.")
+            except requests.exceptions.HTTPError as he:
+                st.error(f"🚨 API 오류: {he}")
+                if hasattr(he, 'response') and he.response is not None:
+                    st.code(he.response.text)
+            except Exception as e:
+                st.error(f"⚠️ 예상치 못한 오류가 발생했습니다:")
+                st.exception(e)
+
+                # 오류 발생 시 도움말 제공
+                with st.expander("💡 문제 해결 도움말", expanded=True):
+                    st.markdown("""
+                    **일반적인 해결 방법:**
+                    1. API 서버가 실행 중인지 확인
+                    2. 사이드바에서 API Base URL 확인
+                    3. 네트워크 연결 상태 확인
+                    4. 질의를 더 간단하게 수정
+
+                    **추천 질의 예시:**
+                    - "삼성전자 최근 뉴스"
+                    - "2차전지 업계 동향"
+                    - "반도체 시장 전망"
+                    - "KAI 실적 전망"
+                    """)
+
+    # 도움말 섹션
+    with st.expander("❓ Context Engineering 시스템 도움말", expanded=False):
+        st.markdown("""
+        ### 🚀 향상된 기능들
+
+        **🔍 지능형 검색**: 다단계 검색 전략으로 더 정확한 결과
+        **💡 동적 인사이트**: LLM 기반 실시간 분석
+        **📊 개인화**: 질의 유형별 맞춤 응답
+        **⚡ 캐싱**: 빠른 응답 속도
+        **🛡️ 안정성**: 서비스 장애 시에도 기본 응답 제공
+
+        ### 💭 질의 팁
+        - **구체적인 키워드** 사용 (예: "삼성전자", "SMR", "2차전지")
+        - **시간 범위** 포함 (예: "최근", "2024년")
+        - **관심 영역** 명시 (예: "투자", "수출", "실적")
+        """)
 
 # ========== 탭 2: 그래프 컨텍스트 ==========
 with tab_graph:
     st.subheader("그래프 컨텍스트 조회")
-    g_input = query_block("graph", defaults={"q": "한화", "limit": 30, "lookback_days": 180})
+    g_input = query_block("graph", defaults={"q": "", "limit": 30, "lookback_days": 180})
     
     # 관계 포함 옵션
     include_relationships = st.checkbox("관계(에지) 포함", value=False, key=wkey("include_rels", "graph"))
@@ -489,14 +664,14 @@ LIMIT $limit
                     st.success(f"노드 {len(rows)}개 수신")
                 else:
                     st.warning("검색 결과가 없습니다. 다른 키워드로 시도해보세요.")
-                    st.info("💡 **추천 키워드**: '한화', '회사', '뉴스' 등으로 시도해보세요.")
+                    st.info("💡 **추천 키워드**: '삼성전자', 'LG에너지솔루션', 'SK하이닉스', '005930.KS' 등으로 시도해보세요.")
                 
                 # API 응답 디버그
                 with st.expander("🔍 API 응답 디버그", expanded=False):
                     st.write("API 응답 전체:")
                     st.json(res)
                 
-                # 데이터 타입별로 분류
+                # 데이터 타입별로 분류 - 새 스키마 노드 포함
                 news_data = [r for r in rows if "News" in r.get("labels", [])]
                 event_data = [r for r in rows if "Event" in r.get("labels", [])]
                 company_data = [r for r in rows if "Company" in r.get("labels", [])]
@@ -526,23 +701,106 @@ LIMIT $limit
                 with tab_news:
                     if news_data:
                         st.subheader("연관 뉴스")
-                        for i, news in enumerate(news_data[:10]):  # 최대 10개 표시
-                            n = news.get("n", {})
-                            url = n.get("url", "")
-                            article_id = n.get("articleId", "")
-                            last_seen = n.get("lastSeenAt", "")
-                            
-                            with st.container():
-                                col1, col2 = st.columns([3, 1])
-                                with col1:
-                                    if url:
-                                        st.markdown(f"**뉴스 {i+1}**: [{url}]({url})")
-                                    else:
-                                        st.markdown(f"**뉴스 {i+1}**: Article ID {article_id}")
-                                with col2:
-                                    if last_seen:
-                                        st.caption(f"발견: {last_seen[:10]}")
-                                st.divider()
+
+                        # 표시 방식 선택
+                        news_view_mode = st.radio(
+                            "표시 방식",
+                            ["표 형식", "리스트 형식"],
+                            horizontal=True,
+                            key=wkey("news_view_mode", "graph")
+                        )
+
+                        if news_view_mode == "표 형식":
+                            # 표 형식으로 표시
+                            import pandas as pd
+
+                            # 뉴스 데이터프레임 생성
+                            news_table_data = []
+                            for i, news in enumerate(news_data[:10], 1):
+                                n = news.get("n", {})
+                                url = n.get("url", "")
+                                article_id = n.get("articleId", "")
+                                last_seen = n.get("lastSeenAt", "")
+                                title = n.get("title", "") or f"Article {article_id}"
+
+                                # 제목 길이 제한
+                                if len(title) > 50:
+                                    title = title[:47] + "..."
+
+                                news_table_data.append({
+                                    "순번": i,
+                                    "제목": title,
+                                    "Article ID": article_id,
+                                    "발견일": last_seen[:10] if last_seen else "-",
+                                    "URL": url if url else "-"
+                                })
+
+                            news_df = pd.DataFrame(news_table_data)
+
+                            # Streamlit 데이터프레임으로 표시
+                            st.dataframe(
+                                news_df,
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "순번": st.column_config.NumberColumn(
+                                        "순번",
+                                        width="small",
+                                        format="%d"
+                                    ),
+                                    "제목": st.column_config.TextColumn(
+                                        "제목",
+                                        width="large",
+                                        help="뉴스 제목"
+                                    ),
+                                    "Article ID": st.column_config.TextColumn(
+                                        "기사 ID",
+                                        width="medium",
+                                        help="기사 고유 식별자"
+                                    ),
+                                    "발견일": st.column_config.DateColumn(
+                                        "발견일",
+                                        width="medium",
+                                        format="YYYY-MM-DD"
+                                    ),
+                                    "URL": st.column_config.LinkColumn(
+                                        "링크",
+                                        width="medium",
+                                        help="뉴스 원문 링크",
+                                        display_text="🔗 원문보기"
+                                    )
+                                }
+                            )
+
+                            # CSV 다운로드 버튼
+                            news_csv = news_df.to_csv(index=False, encoding='utf-8-sig')
+                            st.download_button(
+                                label="📄 뉴스 CSV 다운로드",
+                                data=news_csv,
+                                file_name="graph_news.csv",
+                                mime="text/csv",
+                                key=wkey("download_news_csv", "graph")
+                            )
+
+                        else:
+                            # 기존 리스트 형식
+                            for i, news in enumerate(news_data[:10]):  # 최대 10개 표시
+                                n = news.get("n", {})
+                                url = n.get("url", "")
+                                article_id = n.get("articleId", "")
+                                last_seen = n.get("lastSeenAt", "")
+
+                                with st.container():
+                                    col1, col2 = st.columns([3, 1])
+                                    with col1:
+                                        if url:
+                                            st.markdown(f"**뉴스 {i+1}**: [{url}]({url})")
+                                        else:
+                                            st.markdown(f"**뉴스 {i+1}**: Article ID {article_id}")
+                                    with col2:
+                                        if last_seen:
+                                            st.caption(f"발견: {last_seen[:10]}")
+                                    st.divider()
                     else:
                         st.info("연관 뉴스가 없습니다.")
                 
@@ -607,51 +865,273 @@ LIMIT $limit
 
 # ========== 탭 3: 리포트 ==========
 with tab_report:
-    st.subheader("자동 리포트 생성")
-    # 동일 라벨 위젯들에도 고유 key 부여
-    r_input = query_block("report", defaults={"q": "한화 지상무기 수주", "limit": 20, "lookback_days": 180, "domain": "지상무기 전차 자주포 장갑차"})
-    r_symbol = st.text_input("관심 종목(선택, 예: 005930.KS)", value="", key=wkey("symbol", "report"))
+    st.header("📊 테마별 종목 전망 리포트")
+    st.markdown("**테마 또는 개별 종목을 선택하여 뉴스, 온톨로지, 재무정보 기반 전망 보고서를 생성합니다**")
 
-    # 리포트 구성 옵션(예시)
-    colX, colY, colZ = st.columns([1, 1, 1])
-    with colX:
-        include_news = st.checkbox("뉴스 섹션 포함", value=True, key=wkey("include_news", "report"))
-    with colY:
-        include_graph = st.checkbox("그래프 섹션 포함", value=True, key=wkey("include_graph", "report"))
-    with colZ:
-        include_stock = st.checkbox("주가 섹션 포함", value=True, key=wkey("include_stock", "report"))
+    # 리포트 모드 선택
+    report_mode = st.radio(
+        "리포트 생성 모드",
+        ["🎯 테마별 분석", "🏢 개별 종목 분석"],
+        horizontal=True,
+        key=wkey("report_mode", "report"),
+        help="테마별 분석: 2차전지, 반도체, 원자력 등 / 개별 종목: 특정 상장사 중심 분석"
+    )
 
-    payload = {
-        "query": r_input["q"],
-        "domain": r_input["domain"],
-        "lookback_days": r_input["lookback_days"],
-        # 보고서 API 스키마에 맞게 전달
-        "news_size": int(r_input["limit"]),
-        "graph_limit": int(r_input["limit"]),
-        "symbol": r_symbol or None,
-        # 섹션 토글은 현재 백엔드에서 사용하지 않지만, 확장 대비 유지
-        "sections": {
-            "news": include_news,
-            "graph": include_graph,
-            "stock": include_stock,
+    # 테마별 종목 데이터 구성
+    THEME_SECTORS = {
+        "🔋 2차전지/에너지": {
+            "keywords": ["배터리", "2차전지", "리튬", "전기차", "ESS"],
+            "companies": [
+                {"name": "LG에너지솔루션", "code": "373220", "sector": "배터리"},
+                {"name": "삼성SDI", "code": "006400", "sector": "배터리"},
+                {"name": "SK온", "code": "096770", "sector": "배터리"},
+                {"name": "포스코케미칼", "code": "003670", "sector": "배터리 소재"},
+                {"name": "에코프로", "code": "086520", "sector": "양극재"},
+                {"name": "L&F", "code": "066970", "sector": "양극재"}
+            ]
         },
+        "💾 반도체/IT": {
+            "keywords": ["반도체", "메모리", "시스템반도체", "AI칩", "HBM"],
+            "companies": [
+                {"name": "삼성전자", "code": "005930", "sector": "종합 반도체"},
+                {"name": "SK하이닉스", "code": "000660", "sector": "메모리 반도체"},
+                {"name": "카카오", "code": "035720", "sector": "IT 플랫폼"},
+                {"name": "네이버", "code": "035420", "sector": "IT 플랫폼"},
+                {"name": "LG이노텍", "code": "011070", "sector": "전자부품"}
+            ]
+        },
+        "🚗 모빌리티/자동차": {
+            "keywords": ["자동차", "전기차", "자율주행", "모빌리티"],
+            "companies": [
+                {"name": "현대차", "code": "005380", "sector": "완성차"},
+                {"name": "기아", "code": "000270", "sector": "완성차"},
+                {"name": "현대모비스", "code": "012330", "sector": "자동차 부품"},
+                {"name": "LG전자", "code": "066570", "sector": "전장 부품"},
+                {"name": "삼성전기", "code": "009150", "sector": "전자부품"}
+            ]
+        },
+        "🏗️ 건설/인프라": {
+            "keywords": ["건설", "인프라", "스마트시티", "해외수주"],
+            "companies": [
+                {"name": "현대건설", "code": "000720", "sector": "건설"},
+                {"name": "삼성물산", "code": "028260", "sector": "건설/상사"},
+                {"name": "GS건설", "code": "006360", "sector": "건설"},
+                {"name": "대우건설", "code": "047040", "sector": "건설"}
+            ]
+        },
+        "💻 IT/소프트웨어": {
+            "keywords": ["IT", "소프트웨어", "클라우드", "인공지능", "AI", "빅데이터"],
+            "companies": [
+                {"name": "삼성SDS", "code": "018260", "sector": "IT 서비스"},
+                {"name": "LG CNS", "code": "251270", "sector": "IT 서비스"},
+                {"name": "네이버", "code": "035420", "sector": "인터넷 서비스"},
+                {"name": "카카오", "code": "035720", "sector": "인터넷 서비스"},
+                {"name": "엔씨소프트", "code": "036550", "sector": "소프트웨어"},
+                {"name": "두산범비계", "code": "018880", "sector": "ERP 소프트웨어"}
+            ]
+        },
+        "🧬 바이오/의료": {
+            "keywords": ["바이오", "제약", "의료", "헬스케어", "신약", "진단"],
+            "companies": [
+                {"name": "삼성바이오로직스", "code": "207940", "sector": "바이오의약품"},
+                {"name": "셀트리온", "code": "068270", "sector": "제약"},
+                {"name": "바이오니아", "code": "064550", "sector": "바이오의약품"},
+                {"name": "대웅제약", "code": "069620", "sector": "제약"},
+                {"name": "버텍생명과학", "code": "036010", "sector": "제약"},
+                {"name": "유한양행", "code": "000210", "sector": "의료기기"}
+            ]
+        },
+        "⚡ 에너지/배터리": {
+            "keywords": ["에너지", "신재생", "태양광", "풍력", "배터리", "전기차"],
+            "companies": [
+                {"name": "LG에너지솔루션", "code": "373220", "sector": "배터리"},
+                {"name": "삼성SDI", "code": "006400", "sector": "배터리"},
+                {"name": "한화솔루션", "code": "009830", "sector": "태양광/에너지"},
+                {"name": "OCI", "code": "010060", "sector": "태양광 소재"},
+                {"name": "원진그린", "code": "143540", "sector": "태양광"},
+                {"name": "두산에너빌", "code": "069730", "sector": "풍력"}
+            ]
+        }
     }
 
-    r_run = st.button("리포트 생성", key=wkey("run", "report"))
-    if r_run:
-        try:
-            # 백엔드에 /report 가 없다면 일단 /chat 결과를 재활용하거나,
-            # 보고서 생성을 위한 별도 엔드포인트를 만들어 주세요.
-            # 아래는 /report 사용 예시입니다.
-            data = call_report(payload)
-            st.markdown("### 리포트")
-            st.markdown(data.get("markdown", "보고서 본문이 없습니다."))
-            with st.expander("원본 JSON 보기"):
-                st.json(data)
-        except requests.HTTPError as he:
-            if he.response is not None and he.response.status_code == 404:
-                st.warning("`/report` 엔드포인트가 없습니다. FastAPI에 리포트 API를 추가하거나, Chat 결과를 조합해 보여주세요.")
+    # 모드별 UI 구성
+    if report_mode == "🎯 테마별 분석":
+        st.subheader("🎯 테마별 분석 설정")
+
+        # 테마 선택
+        selected_theme = st.selectbox(
+            "분석할 테마 선택",
+            list(THEME_SECTORS.keys()),
+            key=wkey("theme_select", "report"),
+            help="각 테마별로 관련 종목들과 키워드가 자동 설정됩니다"
+        )
+
+        # 선택된 테마 정보 표시
+        theme_data = THEME_SECTORS[selected_theme]
+
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            st.markdown("**🔍 분석 키워드**")
+            st.info(" • ".join(theme_data["keywords"]))
+
+        with col2:
+            st.markdown("**🏢 포함 종목**")
+            company_list = [f"{comp['name']}({comp['code']})" for comp in theme_data["companies"]]
+            st.info(" • ".join(company_list[:3]) + f" 외 {len(company_list)-3}개")
+
+        # 분석 기간 설정
+        analysis_period = st.select_slider(
+            "분석 기간",
+            ["1주일", "2주일", "1개월", "3개월", "6개월"],
+            value="1개월",
+            key=wkey("period", "theme_report")
+        )
+
+    else:  # 개별 종목 분석
+        st.subheader("🏢 개별 종목 분석 설정")
+
+        # 직접 입력 또는 테마에서 선택
+        input_method = st.radio(
+            "종목 선택 방법",
+            ["📝 직접 입력", "📋 테마별 선택"],
+            horizontal=True,
+            key=wkey("input_method", "report")
+        )
+
+        if input_method == "📝 직접 입력":
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                company_input = st.text_input(
+                    "회사명 또는 종목코드",
+                    placeholder="예: 삼성전자, 005930, LG에너지솔루션",
+                    key=wkey("company_input", "report")
+                )
+            with col2:
+                analysis_period = st.selectbox(
+                    "분석 기간",
+                    ["1주일", "2주일", "1개월", "3개월", "6개월"],
+                    index=2,
+                    key=wkey("period", "individual_report")
+                )
+        else:
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                theme_for_company = st.selectbox(
+                    "테마 선택",
+                    list(THEME_SECTORS.keys()),
+                    key=wkey("theme_for_company", "report")
+                )
+            with col2:
+                companies_in_theme = THEME_SECTORS[theme_for_company]["companies"]
+                selected_company = st.selectbox(
+                    "종목 선택",
+                    [f"{comp['name']} ({comp['code']})" for comp in companies_in_theme],
+                    key=wkey("company_from_theme", "report")
+                )
+
+    st.divider()
+
+    # 리포트 생성 설정
+    st.subheader("⚙️ 리포트 생성 설정")
+
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        include_news = st.checkbox("📰 최신 뉴스 분석", value=True, key=wkey("include_news", "report"))
+    with col2:
+        include_ontology = st.checkbox("🕸️ 온톨로지 그래프", value=True, key=wkey("include_ontology", "report"))
+    with col3:
+        include_financial = st.checkbox("💰 재무 정보", value=True, key=wkey("include_financial", "report"))
+
+    # 리포트 생성 버튼
+    st.markdown("---")
+    generate_report = st.button(
+        "🚀 전망 리포트 생성",
+        type="primary",
+        key=wkey("generate_report", "report"),
+        help="선택된 설정에 따라 종합 전망 보고서를 생성합니다"
+    )
+
+    # 리포트 생성 로직
+    if generate_report:
+        # 쿼리 구성
+        if report_mode == "🎯 테마별 분석":
+            # 테마별 분석용 쿼리 생성
+            query_text = f"{selected_theme.replace('🚀 ', '').replace('🔋 ', '').replace('💾 ', '').replace('🚗 ', '').replace('🏗️ ', '')} 관련 최신 동향 전망"
+            keywords = theme_data["keywords"]
+            companies = [comp["name"] for comp in theme_data["companies"]]
+
+            st.info(f"**분석 대상**: {selected_theme} | **기간**: {analysis_period} | **종목 수**: {len(companies)}개")
+
+        else:
+            # 개별 종목 분석용 쿼리 생성
+            if input_method == "📝 직접 입력":
+                if not company_input:
+                    st.warning("회사명 또는 종목코드를 입력해주세요.")
+                    st.stop()
+                query_text = f"{company_input} 최신 뉴스 전망 분석"
+                keywords = [company_input]
+                companies = [company_input]
             else:
-                st.exception(he)
-        except Exception as e:
-            st.exception(e)
+                # 테마에서 선택한 종목
+                company_name = selected_company.split(" (")[0]  # "삼성전자 (005930)" -> "삼성전자"
+                query_text = f"{company_name} 최신 뉴스 전망 분석"
+                keywords = [company_name]
+                companies = [company_name]
+
+            st.info(f"**분석 대상**: {companies[0]} | **기간**: {analysis_period}")
+
+        # 기간을 일수로 변환
+        period_days = {"1주일": 7, "2주일": 14, "1개월": 30, "3개월": 90, "6개월": 180}
+        lookback_days = period_days.get(analysis_period, 30)
+
+        with st.spinner("🔍 데이터 수집 및 분석 중..."):
+            try:
+                # 새로운 전망 리포트 API 호출
+                report_data = call_forecast_report({
+                    "query": query_text,
+                    "keywords": keywords,
+                    "companies": companies,
+                    "lookback_days": lookback_days,
+                    "include_news": include_news,
+                    "include_ontology": include_ontology,
+                    "include_financial": include_financial,
+                    "report_mode": report_mode
+                })
+
+                # 리포트 표시
+                st.success("✅ 전망 리포트가 완성되었습니다!")
+
+                # 리포트 헤더
+                st.markdown(f"# 📊 {query_text}")
+                st.markdown(f"**생성일시**: {report_data.get('generated_at', '알 수 없음')} | **분석 기간**: {analysis_period}")
+
+                # 리포트 내용 표시
+                if "executive_summary" in report_data:
+                    st.markdown("## 🎯 핵심 요약")
+                    st.markdown(report_data["executive_summary"])
+
+                if "news_analysis" in report_data:
+                    st.markdown("## 📰 뉴스 분석")
+                    st.markdown(report_data["news_analysis"])
+
+                if "ontology_insights" in report_data:
+                    st.markdown("## 🕸️ 관계 분석")
+                    st.markdown(report_data["ontology_insights"])
+
+                if "financial_outlook" in report_data:
+                    st.markdown("## 💰 재무 전망")
+                    st.markdown(report_data["financial_outlook"])
+
+                if "conclusion" in report_data:
+                    st.markdown("## 📈 투자 전망")
+                    st.markdown(report_data["conclusion"])
+
+                # 참고 자료
+                if "sources" in report_data and report_data["sources"]:
+                    st.markdown("## 📑 참고 자료")
+                    for i, source in enumerate(report_data["sources"][:5], 1):
+                        st.markdown(f"{i}. [{source.get('title', '제목없음')}]({source.get('url', '#')}) - {source.get('date', '')}")
+
+            except Exception as e:
+                st.error(f"⚠️ 리포트 생성 중 오류 발생: {e}")
+                st.info("💡 대안: Enhanced Chat 탭에서 개별 질의를 시도해보세요.")

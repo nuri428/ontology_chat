@@ -12,26 +12,43 @@ class KeywordWeight:
     weight: float = 1.0
     priority: int = 1  # 1=high, 2=medium, 3=low
 
-# 도메인별 핵심 키워드 매핑
+# 도메인별 핵심 키워드 매핑 (범용적 비즈니스 도메인)
 DOMAIN_KEYWORDS = {
-    "defense": {
-        "triggers": ["지상무기", "방산", "무기", "국방", "군사", "전투"],
+    "technology": {
+        "triggers": ["기술", "혁신", "디지털", "AI", "인공지능", "소프트웨어"],
         "expansions": [
-            KeywordWeight("지상무기", 2.0, 1),
-            KeywordWeight("무기", 1.8, 1),
-            KeywordWeight("방산", 2.0, 1),
-            KeywordWeight("방위", 1.5, 2),
-            KeywordWeight("군사", 1.6, 2),
-            KeywordWeight("국방", 1.7, 1),
-            KeywordWeight("전투", 1.4, 2),
-            KeywordWeight("장비", 1.3, 2),
-            KeywordWeight("시스템", 1.2, 3),
-            KeywordWeight("기술", 1.1, 3),
+            KeywordWeight("기술", 2.0, 1),
+            KeywordWeight("혁신", 1.8, 1),
+            KeywordWeight("디지털", 1.9, 1),
+            KeywordWeight("인공지능", 1.8, 1),
+            KeywordWeight("AI", 1.8, 1),
+            KeywordWeight("소프트웨어", 1.7, 1),
+            KeywordWeight("플랫폼", 1.6, 2),
+            KeywordWeight("솔루션", 1.5, 2),
+            KeywordWeight("시스템", 1.4, 2),
+            KeywordWeight("서비스", 1.3, 2),
         ],
         "synonyms": {
-            "지상무기": ["육상무기", "땅무기", "지상장비"],
-            "방산": ["국방산업", "방위산업", "군사산업"],
-            "무기": ["병기", "무기체계", "무기시스템"]
+            "기술": ["테크", "테크놀로지", "기술력"],
+            "혁신": ["이노베이션", "신기술", "첨단기술"],
+            "AI": ["인공지능", "머신러닝", "딥러닝"]
+        }
+    },
+    "manufacturing": {
+        "triggers": ["제조", "생산", "공장", "설비", "자동화"],
+        "expansions": [
+            KeywordWeight("제조", 2.0, 1),
+            KeywordWeight("생산", 1.9, 1),
+            KeywordWeight("공장", 1.7, 1),
+            KeywordWeight("설비", 1.6, 2),
+            KeywordWeight("자동화", 1.8, 1),
+            KeywordWeight("품질", 1.5, 2),
+            KeywordWeight("효율", 1.4, 2),
+        ],
+        "synonyms": {
+            "제조": ["제조업", "생산", "가공"],
+            "생산": ["제조", "생산성", "산출"],
+            "자동화": ["스마트팩토리", "무인화", "디지털화"]
         }
     },
     "export": {
@@ -92,63 +109,69 @@ DOMAIN_KEYWORDS = {
     }
 }
 
-# 산업별 키워드 매핑
+# 산업별 키워드 매핑 (다양한 산업 도메인)
 INDUSTRY_KEYWORDS = {
-    "defense": [
-        KeywordWeight("방산", 2.0, 1),
-        KeywordWeight("국방", 1.9, 1),
-        KeywordWeight("군사", 1.7, 2),
-        KeywordWeight("무기", 1.8, 1),
-        KeywordWeight("장비", 1.5, 2),
-        KeywordWeight("시스템", 1.3, 3),
+    "technology": [
+        KeywordWeight("IT", 2.0, 1),
+        KeywordWeight("소프트웨어", 1.9, 1),
+        KeywordWeight("하드웨어", 1.7, 2),
+        KeywordWeight("클라우드", 1.8, 1),
+        KeywordWeight("데이터", 1.6, 2),
+        KeywordWeight("보안", 1.5, 2),
     ],
-    "aerospace": [
-        KeywordWeight("항공", 1.8, 1),
-        KeywordWeight("우주", 1.9, 1),
-        KeywordWeight("위성", 1.7, 2),
-        KeywordWeight("로켓", 1.6, 2),
-        KeywordWeight("발사체", 1.5, 2),
-        KeywordWeight("항공우주", 2.0, 1),
+    "bio": [
+        KeywordWeight("바이오", 1.9, 1),
+        KeywordWeight("제약", 1.8, 1),
+        KeywordWeight("의료", 1.7, 1),
+        KeywordWeight("헬스케어", 1.8, 1),
+        KeywordWeight("신약", 1.9, 1),
+        KeywordWeight("진단", 1.6, 2),
     ],
-    "nuclear": [
-        KeywordWeight("원전", 1.9, 1),
-        KeywordWeight("원자력", 2.0, 1),
-        KeywordWeight("핵", 1.6, 2),
-        KeywordWeight("에너지", 1.4, 3),
-        KeywordWeight("발전", 1.3, 3),
-        KeywordWeight("플랜트", 1.5, 2),
+    "energy": [
+        KeywordWeight("에너지", 1.9, 1),
+        KeywordWeight("신재생", 1.8, 1),
+        KeywordWeight("태양광", 1.7, 1),
+        KeywordWeight("풍력", 1.6, 2),
+        KeywordWeight("배터리", 1.8, 1),
+        KeywordWeight("전기차", 1.7, 1),
+    ],
+    "semiconductor": [
+        KeywordWeight("반도체", 2.0, 1),
+        KeywordWeight("칩", 1.8, 1),
+        KeywordWeight("메모리", 1.7, 1),
+        KeywordWeight("시스템반도체", 1.9, 1),
+        KeywordWeight("파운드리", 1.6, 2),
     ]
 }
 
-# 회사별 키워드 확장
+# 회사별 키워드 확장 (일반적인 기업 패턴)
 COMPANY_KEYWORDS = {
-    "hanwha": {
-        "triggers": ["한화"],
+    "samsung": {
+        "triggers": ["삼성"],
         "expansions": [
-            KeywordWeight("한화", 2.0, 1),
-            KeywordWeight("한화그룹", 1.8, 1),
-            KeywordWeight("한화시스템", 1.9, 1),
-            KeywordWeight("한화에어로스페이스", 1.8, 1),
-            KeywordWeight("한화디펜스", 1.9, 1),
-            KeywordWeight("한화정밀기계", 1.6, 2),
-            KeywordWeight("한화테크윈", 1.5, 2),
+            KeywordWeight("삼성", 2.0, 1),
+            KeywordWeight("삼성전자", 1.9, 1),
+            KeywordWeight("삼성그룹", 1.8, 1),
+            KeywordWeight("삼성바이오로직스", 1.7, 1),
+            KeywordWeight("삼성SDI", 1.6, 2),
         ]
     },
-    "kai": {
-        "triggers": ["kai", "카이", "한국항공우주"],
+    "lg": {
+        "triggers": ["LG", "엘지"],
         "expansions": [
-            KeywordWeight("KAI", 2.0, 1),
-            KeywordWeight("카이", 2.0, 1),
-            KeywordWeight("한국항공우주", 2.0, 1),
-            KeywordWeight("한국항공우주산업", 1.9, 1),
+            KeywordWeight("LG", 2.0, 1),
+            KeywordWeight("LG전자", 1.9, 1),
+            KeywordWeight("LG화학", 1.8, 1),
+            KeywordWeight("LG에너지솔루션", 1.9, 1),
         ]
     },
-    "lignex1": {
-        "triggers": ["lignex1", "엘아이지넥스원", "엘아이지"],
+    "sk": {
+        "triggers": ["SK", "에스케이"],
         "expansions": [
-            KeywordWeight("LIG넥스원", 2.0, 1),
-            KeywordWeight("엘아이지넥스원", 2.0, 1),
-            KeywordWeight("엘아이지", 1.8, 1),
+            KeywordWeight("SK", 2.0, 1),
+            KeywordWeight("SK하이닉스", 1.9, 1),
+            KeywordWeight("SK텔레콤", 1.7, 1),
+            KeywordWeight("SK이노베이션", 1.8, 1),
         ]
     }
 }

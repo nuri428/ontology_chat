@@ -1,7 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from api.mcp.base import registry
-from api.mcp.tools import Neo4jDiagTool, Neo4jMCP, SearchNewsTool, QueryGraphTool, GetPriceTool, GetHistoryTool
+from api.mcp.tools import (
+    Neo4jDiagTool, Neo4jMCP, SearchNewsTool, QueryGraphTool, GetPriceTool, GetHistoryTool,
+    GetStocksByThemeTool, GetAllThemesTool, GetThemeStocksTool, GetStockBySymbolTool,
+    SearchStocksTool, GetTopPerformingStocksTool, InitializeStockDbTool
+)
 from api.config import settings
 from api.services.cypher_builder import build_label_aware_search_cypher
 
@@ -21,6 +25,15 @@ registry.register(QueryGraphTool())
 registry.register(GetPriceTool())
 registry.register(GetHistoryTool())
 registry.register(Neo4jDiagTool())
+
+# RDB MCP 도구들 등록
+registry.register(GetStocksByThemeTool())
+registry.register(GetAllThemesTool())
+registry.register(GetThemeStocksTool())
+registry.register(GetStockBySymbolTool())
+registry.register(SearchStocksTool())
+registry.register(GetTopPerformingStocksTool())
+registry.register(InitializeStockDbTool())
 
 class CallRequest(BaseModel):
     tool: str = Field(..., description="Tool name")

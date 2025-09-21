@@ -1,0 +1,286 @@
+{
+  "nodes": {
+    "News": {
+      "label": "News",
+      "description": "뉴스 기사",
+      "primaryKey": "articleId",
+      "properties": {
+        "articleId": {"type": "string", "description": "뉴스 기사 고유 ID", "required": true},
+        "url": {"type": "string", "description": "뉴스 기사 URL"},
+        "lastSeenAt": {"type": "datetime", "description": "마지막 처리 시간"}
+      },
+      "color": "#FF6B6B",
+      "icon": "📰"
+    },
+    "Event": {
+      "label": "Event",
+      "description": "비즈니스 이벤트",
+      "primaryKey": "eventId",
+      "properties": {
+        "eventId": {"type": "string", "description": "이벤트 고유 ID", "required": true},
+        "event_type": {"type": "string", "description": "이벤트 유형", "enum": ["Earnings", "Investment", "Acquisition", "Partnership", "IPO", "ContractAward", "Export"]},
+        "published_at": {"type": "datetime", "description": "발행 시간"},
+        "title": {"type": "string", "description": "이벤트 제목"},
+        "sentiment": {"type": "string", "description": "감정", "enum": ["positive", "neutral", "negative"]},
+        "confidence": {"type": "float", "description": "신뢰도 (0.0-1.0)"}
+      },
+      "color": "#4ECDC4",
+      "icon": "📊"
+    },
+    "Company": {
+      "label": "Company",
+      "description": "기업/상장사",
+      "primaryKey": "name",
+      "properties": {
+        "name": {"type": "string", "description": "기업명", "required": true},
+        "ticker": {"type": "string", "description": "주식 코드"},
+        "market": {"type": "string", "description": "거래소", "enum": ["KOSPI", "KOSDAQ", "KONEX"]},
+        "sector": {"type": "string", "description": "업종"},
+        "market_cap": {"type": "float", "description": "시가총액 (억원)"},
+        "is_listed": {"type": "boolean", "description": "상장 여부"}
+      },
+      "color": "#45B7D1",
+      "icon": "🏢"
+    },
+    "Evidence": {
+      "label": "Evidence",
+      "description": "근거 텍스트",
+      "primaryKey": "eventId,text",
+      "properties": {
+        "eventId": {"type": "string", "description": "연결된 이벤트 ID", "required": true},
+        "text": {"type": "string", "description": "근거 텍스트 내용", "required": true}
+      },
+      "color": "#F7DC6F",
+      "icon": "📋"
+    },
+    "Contract": {
+      "label": "Contract",
+      "description": "계약/수주",
+      "primaryKey": "contractId",
+      "properties": {
+        "contractId": {"type": "string", "description": "계약 고유 ID", "required": true},
+        "amount": {"type": "float", "description": "계약 금액"},
+        "value_ccy": {"type": "string", "description": "통화"},
+        "award_date": {"type": "date", "description": "계약 체결일"}
+      },
+      "color": "#BB8FCE",
+      "icon": "📋"
+    },
+    "Country": {
+      "label": "Country",
+      "description": "국가",
+      "primaryKey": "code",
+      "properties": {
+        "code": {"type": "string", "description": "국가 코드", "required": true},
+        "name": {"type": "string", "description": "국가명"}
+      },
+      "color": "#85C1E9",
+      "icon": "🌍"
+    },
+    "Product": {
+      "label": "Product",
+      "description": "제품/서비스",
+      "primaryKey": "name",
+      "properties": {
+        "name": {"type": "string", "description": "제품명", "required": true},
+        "category": {"type": "string", "description": "카테고리"},
+        "description": {"type": "string", "description": "제품 설명"},
+        "industry_category": {"type": "string", "description": "산업 카테고리", "enum": ["technology", "manufacturing", "bio", "energy", "finance", "service", "others"]},
+        "product_type": {"type": "string", "description": "제품 유형", "enum": ["hardware", "software", "service"]}
+      },
+      "color": "#F8C471",
+      "icon": "🛠️"
+    },
+    "FinancialMetric": {
+      "label": "FinancialMetric",
+      "description": "재무 지표",
+      "primaryKey": "eventId,metric_type",
+      "properties": {
+        "eventId": {"type": "string", "description": "연결된 이벤트 ID", "required": true},
+        "metric_type": {"type": "string", "description": "지표 유형", "required": true, "enum": ["revenue", "operating_profit", "net_income", "EBITDA"]},
+        "amount": {"type": "float", "description": "금액"},
+        "currency": {"type": "string", "description": "통화", "default": "KRW"},
+        "period": {"type": "string", "description": "기간"},
+        "year_over_year": {"type": "float", "description": "전년대비 증감률"}
+      },
+      "color": "#82E0AA",
+      "icon": "💰"
+    },
+    "Investment": {
+      "label": "Investment",
+      "description": "투자 정보",
+      "primaryKey": "eventId,investment_type",
+      "properties": {
+        "eventId": {"type": "string", "description": "연결된 이벤트 ID", "required": true},
+        "investment_type": {"type": "string", "description": "투자 유형", "required": true, "enum": ["equity", "debt", "venture", "private_equity"]},
+        "amount": {"type": "float", "description": "투자 금액"},
+        "currency": {"type": "string", "description": "통화", "default": "KRW"},
+        "stake_percentage": {"type": "float", "description": "지분율"},
+        "purpose": {"type": "string", "description": "투자 목적"}
+      },
+      "color": "#F1948A",
+      "icon": "💼"
+    },
+    "Program": {
+      "label": "Program",
+      "description": "방산 프로그램",
+      "primaryKey": "code",
+      "properties": {
+        "code": {"type": "string", "description": "프로그램 코드", "required": true},
+        "label": {"type": "string", "description": "프로그램명"},
+        "isOfficial": {"type": "boolean", "description": "공식 프로그램 여부"}
+      },
+      "color": "#D2B4DE",
+      "icon": "🎯",
+      "conditional": true,
+      "note": "방산 기업 전용"
+    },
+    "Agency": {
+      "label": "Agency",
+      "description": "방산 기관",
+      "primaryKey": "code",
+      "properties": {
+        "code": {"type": "string", "description": "기관 코드", "required": true},
+        "label": {"type": "string", "description": "기관명"}
+      },
+      "color": "#AED6F1",
+      "icon": "🏛️",
+      "conditional": true,
+      "note": "방산 기업 전용"
+    }
+  },
+  "relationships": {
+    "MENTIONS": {
+      "from": "News",
+      "to": "Event",
+      "description": "뉴스가 이벤트를 언급",
+      "direction": "outgoing",
+      "color": "#FF6B6B"
+    },
+    "HAS_EVIDENCE": {
+      "from": "Event",
+      "to": "Evidence",
+      "description": "이벤트의 근거 텍스트",
+      "direction": "outgoing",
+      "color": "#4ECDC4"
+    },
+    "PARTY_TO": {
+      "from": "Company",
+      "to": "Event",
+      "description": "기업이 이벤트의 당사자",
+      "direction": "outgoing",
+      "color": "#45B7D1"
+    },
+    "HAS_CONTRACT": {
+      "from": "Event",
+      "to": "Contract",
+      "description": "이벤트와 연관된 계약",
+      "direction": "outgoing",
+      "color": "#BB8FCE"
+    },
+    "INVOLVED_IN": {
+      "from": ["Country", "Product", "Agency"],
+      "to": "Event",
+      "description": "이벤트에 관련됨",
+      "direction": "outgoing",
+      "color": "#85C1E9"
+    },
+    "HAS_FINANCIAL_DATA": {
+      "from": "Event",
+      "to": "FinancialMetric",
+      "description": "이벤트의 재무 데이터",
+      "direction": "outgoing",
+      "color": "#82E0AA"
+    },
+    "INVOLVES_INVESTMENT": {
+      "from": "Event",
+      "to": "Investment",
+      "description": "이벤트와 관련된 투자",
+      "direction": "outgoing",
+      "color": "#F1948A"
+    },
+    "SUBJECT_OF": {
+      "from": "Program",
+      "to": "Event",
+      "description": "프로그램이 이벤트의 주체",
+      "direction": "outgoing",
+      "color": "#D2B4DE",
+      "conditional": true
+    }
+  },
+  "eventTypes": {
+    "listed_company": [
+      "Earnings",
+      "Investment",
+      "Acquisition",
+      "Partnership",
+      "IPO",
+      "StockSplit",
+      "Dividend",
+      "CapitalIncrease",
+      "BusinessExpansion",
+      "Restructuring"
+    ],
+    "defense": [
+      "ContractAward",
+      "Export",
+      "Test",
+      "Delivery",
+      "R&D",
+      "MOU",
+      "Certification",
+      "Production",
+      "Order",
+      "Policy"
+    ]
+  },
+  "analysisPatterns": {
+    "news_centered": {
+      "description": "뉴스 중심 분석",
+      "pattern": "(News)-[:MENTIONS]->(Event)-[:HAS_EVIDENCE]->(Evidence)",
+      "use_case": "특정 뉴스의 모든 이벤트와 근거 조회"
+    },
+    "company_performance": {
+      "description": "기업 실적 분석",
+      "pattern": "(Company)-[:PARTY_TO]->(Event:Earnings)-[:HAS_FINANCIAL_DATA]->(FinancialMetric)",
+      "use_case": "상장사별 재무 성과 분석"
+    },
+    "investment_flow": {
+      "description": "투자 흐름 분석",
+      "pattern": "(Company)-[:PARTY_TO]->(Event)-[:INVOLVES_INVESTMENT]->(Investment)",
+      "use_case": "기업간 투자 관계 및 흐름 분석"
+    },
+    "product_ecosystem": {
+      "description": "제품 생태계 분석",
+      "pattern": "(Company)-[:PARTY_TO]->(Event)<-[:INVOLVED_IN]-(Product)",
+      "use_case": "제품별 관련 기업 및 이벤트 분석"
+    },
+    "global_expansion": {
+      "description": "글로벌 진출 분석",
+      "pattern": "(Company)-[:PARTY_TO]->(Event)<-[:INVOLVED_IN]-(Country)",
+      "use_case": "기업의 해외 진출 및 글로벌 활동 분석"
+    }
+  },
+  "queryTemplates": {
+    "company_events": {
+      "description": "특정 기업의 모든 이벤트",
+      "cypher": "MATCH (c:Company {name: $companyName})-[:PARTY_TO]->(e:Event) RETURN c, e ORDER BY e.published_at DESC",
+      "parameters": ["companyName"]
+    },
+    "recent_earnings": {
+      "description": "최근 실적 발표",
+      "cypher": "MATCH (c:Company)-[:PARTY_TO]->(e:Event {event_type: 'Earnings'})-[:HAS_FINANCIAL_DATA]->(f:FinancialMetric) RETURN c.name, c.ticker, e.title, f.metric_type, f.amount ORDER BY e.published_at DESC LIMIT $limit",
+      "parameters": ["limit"]
+    },
+    "sector_analysis": {
+      "description": "업종별 이벤트 분석",
+      "cypher": "MATCH (c:Company {sector: $sector})-[:PARTY_TO]->(e:Event) RETURN e.event_type, count(*) as count ORDER BY count DESC",
+      "parameters": ["sector"]
+    },
+    "investment_network": {
+      "description": "투자 네트워크 분석",
+      "cypher": "MATCH (c1:Company)-[:PARTY_TO]->(e:Event)-[:INVOLVES_INVESTMENT]->(i:Investment) MATCH (c2:Company)-[:PARTY_TO]->(e) WHERE c1 <> c2 RETURN c1.name, c2.name, i.amount, i.investment_type",
+      "parameters": []
+    }
+  }
+}

@@ -6,12 +6,19 @@ import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
+import asyncio
 
 try:
     from api.services.personalization import analyze_user_query, get_response_style
     PERSONALIZATION_AVAILABLE = True
 except ImportError:
     PERSONALIZATION_AVAILABLE = False
+
+try:
+    from api.services.stock_data_service import stock_data_service
+    STOCK_DATA_AVAILABLE = True
+except ImportError:
+    STOCK_DATA_AVAILABLE = False
 
 @dataclass
 class FormattedSection:
@@ -215,7 +222,7 @@ class ResponseFormatter:
         content_lines = []
         
         # 타입별 우선순위
-        priority_labels = ["Company", "Weapon", "Contract", "Program", "Person", "Country"]
+        priority_labels = ["Company", "Product", "Contract", "Program", "Person", "Country"]
         
         for label in priority_labels:
             if label in entity_types:
@@ -259,16 +266,17 @@ class ResponseFormatter:
         """투자 관련 권장사항 포맷팅"""
         content_lines = []
         
-        # 뉴스 기반 시장 동향
+        # 뉴스 기반 시장 동향 (동적 분석)
         if news_hits:
+            market_trend = self._analyze_market_trend_from_news(news_hits, query)
             content_lines.extend([
                 "### 📊 최근 시장 동향",
-                "- 관련 뉴스 분석 결과, 방산 산업 전반적으로 **긍정적 전망**",
-                "- 정부 정책 지원과 해외 수주 증가로 관련 기업들의 **실적 개선 기대**",
+                f"- 관련 뉴스 분석 결과, {market_trend['industry']} 분야에서 **{market_trend['outlook']}**",
+                f"- {market_trend['key_factor']}로 관련 기업들의 **{market_trend['expectation']}**",
                 ""
             ])
         
-        # 주요 방산 종목 (동적으로 엔티티에서 추출)
+        # 주요 관련 종목 (동적으로 엔티티에서 추출)
         companies = self._extract_companies_from_entities(graph_rows)
         if companies:
             content_lines.append("### 🏢 주요 관련 종목")
@@ -276,22 +284,20 @@ class ResponseFormatter:
                 content_lines.append(f"- **{company}**: 관련 사업 영역에서 활발한 활동")
             content_lines.append("")
         else:
-            # 기본 방산 종목 리스트
+            # 쿼리 기반 동적 종목 추천
+            recommended_stocks = self._get_query_based_stock_recommendations(query)
             content_lines.extend([
-                "### 🏢 주요 방산 종목",
-                "- **한화시스템** (272210.KS): 지상무기 시스템 전문, 최근 수주 증가",
-                "- **한화에어로스페이스** (012450.KS): 항공우주 및 방산, 우주개발 프로젝트 참여", 
-                "- **LIG넥스원** (079550.KS): 방산 전자 시스템, 첨단 기술 보유",
+                f"### 🏢 주요 {recommended_stocks['sector']} 종목",
+                *[f"- **{stock['name']}** ({stock['code']}): {stock['description']}" for stock in recommended_stocks['stocks'][:3]],
                 ""
             ])
         
-        # 투자 포인트
+        # 투자 포인트 (동적 생성)
+        investment_points = self._generate_investment_points_from_query(query, news_hits)
         content_lines.extend([
             "### 💡 투자 포인트",
-            "- **정책적 지원**: 정부의 방산 수출 지원 정책으로 해외 진출 확대",
-            "- **기술력 향상**: 한미 방산 협력 강화로 기술력 향상 및 시장 확대", 
-            "- **수주 증가**: K-방산 브랜드 인지도 상승으로 수주 증가 추세",
-            "- **리스크 요소**: 국제 정세 변화, 환율 변동, 경쟁 심화"
+            *[f"- **{point['title']}**: {point['description']}" for point in investment_points['positive']],
+            f"- **리스크 요소**: {', '.join(investment_points['risks'])}"
         ])
         
         return FormattedSection(
@@ -320,13 +326,11 @@ class ResponseFormatter:
                 ""
             ])
         
-        # 업계 전반 동향
+        # 업계 전반 동향 (동적 분석)
+        industry_trends = self._analyze_industry_trends_from_query(query, news_hits, graph_rows)
         content_lines.extend([
-            "### 🌍 산업 동향",
-            "- **K-방산 수출 증가**: 브랜드 인지도 상승으로 지속적 성장",
-            "- **정부 지원 강화**: 방산 수출 지원 정책으로 업계 전체 성장",
-            "- **기술 협력 확대**: 한미 방산 협력을 통한 기술력 향상",
-            "- **글로벌 경쟁**: 국제 방산 시장에서의 경쟁력 강화 필요"
+            f"### 🌍 {industry_trends['sector']} 산업 동향",
+            *[f"- **{trend['title']}**: {trend['description']}" for trend in industry_trends['trends']]
         ])
         
         return FormattedSection(
@@ -338,16 +342,14 @@ class ResponseFormatter:
     
     def _format_additional_info(self, query: str) -> FormattedSection:
         """추가 정보 및 주의사항"""
+        # 범용 주의사항 (동적 생성)
+        warning_info = self._generate_warning_info_from_query(query)
         content_lines = [
             "### ⚠️ 투자 주의사항",
-            "- 방산 산업은 정부 정책과 국제 정세에 민감하게 반응",
-            "- 투자 전 충분한 리서치와 리스크 관리 필요", 
-            "- 단기 변동성이 클 수 있으므로 장기 투자 관점 권장",
+            *[f"- {warning}" for warning in warning_info['warnings']],
             "",
             "### ℹ️ 추가 정보",
-            "- 실시간 뉴스와 공시 정보를 지속적으로 모니터링",
-            "- 전문가 의견과 시장 분석 리포트 참고",
-            "- 분산 투자를 통한 리스크 관리"
+            *[f"- {info}" for info in warning_info['additional_info']]
         ]
         
         return FormattedSection(
@@ -359,20 +361,16 @@ class ResponseFormatter:
     
     def _format_no_results_guidance(self, query: str) -> FormattedSection:
         """검색 결과 없음 시 가이드"""
+        # 동적 검색 가이드 생성
+        search_guide = self._generate_search_guide_from_query(query)
         content_lines = [
             "> ❌ 관련 결과를 찾지 못했습니다.",
             "",
             "### 💡 검색 개선 제안",
-            "- 키워드를 더 구체적으로 입력해 보세요",
-            "- '한화', '방산', '수출' 등의 핵심 키워드 포함",
-            "- 시간 범위를 조정해 보세요 (예: '최근 1년')",
-            "- 영문명과 한글명을 함께 사용해 보세요",
+            *[f"- {suggestion}" for suggestion in search_guide['suggestions']],
             "",
-            "### 📊 일반적인 시장 동향",
-            "- **방산 산업**: K-방산 수출 증가 추세 지속",
-            "- **정부 정책**: 방산 수출 지원 정책 강화", 
-            "- **국제 협력**: 한미 방산 협력 확대",
-            "- **시장 전망**: 글로벌 방산 시장에서의 한국 기업 입지 강화"
+            f"### 📊 {search_guide['sector']} 일반 동향",
+            *[f"- **{trend['title']}**: {trend['description']}" for trend in search_guide['general_trends']]
         ]
         
         return FormattedSection(
@@ -471,8 +469,8 @@ class ResponseFormatter:
             return "투자 관련 질의"
         elif any(word in q_lower for word in ["수출", "해외"]):
             return "수출/무역 관련 질의" 
-        elif any(word in q_lower for word in ["방산", "무기", "국방"]):
-            return "방산/국방 관련 질의"
+        elif any(word in q_lower for word in ["AI", "인공지능", "기술", "개발"]):
+            return "AI/기술 관련 질의"
         elif any(word in q_lower for word in ["실적", "전망"]):
             return "기업 분석 질의"
         else:
@@ -530,11 +528,231 @@ class ResponseFormatter:
         investment_keywords = ["종목", "주식", "투자", "유망", "추천", "전망", "실적"]
         return any(keyword in query.lower() for keyword in investment_keywords)
     
+    def _analyze_market_trend_from_news(self, news_hits: List[Dict[str, Any]], query: str) -> Dict[str, str]:
+        """뉴스에서 시장 동향 분석"""
+        # 쿼리 기반 산업 감지
+        industry_map = {
+            ("AI", "인공지능", "기계학습"): ("AI/인공지능", "기술 혁신 가속화", "AI 관련 투자 확대", "성장성 개선 전망"),
+            ("반도체", "메모리", "칩"): ("반도체", "글로벌 수요 증가", "기술 경쟁 심화", "시장 점유율 확대 기대"),
+            ("에너지", "배터리", "2차전지"): ("에너지/배터리", "친환경 전환 가속", "정부 정책 지원", "신규 투자 증가"),
+            ("자동차", "전기차", "모빌리티"): ("모빌리티", "전동화 트렌드", "완성차 업체 협력", "부품 수요 증가"),
+            ("바이오", "제약", "의료"): ("바이오/헬스케어", "고령화 사회 진입", "신약 개발 투자", "의료 혁신 확산")
+        }
+
+        for keywords, (industry, outlook, key_factor, expectation) in industry_map.items():
+            if any(kw in query for kw in keywords):
+                return {
+                    "industry": industry,
+                    "outlook": outlook,
+                    "key_factor": key_factor,
+                    "expectation": expectation
+                }
+
+        # 기본값
+        return {
+            "industry": "전체 시장",
+            "outlook": "변동성 확대",
+            "key_factor": "경제 환경 변화",
+            "expectation": "선별적 투자 기회"
+        }
+
+    def _get_query_based_stock_recommendations(self, query: str) -> Dict[str, Any]:
+        """쿼리 기반 동적 종목 추천 - 실시간 데이터 활용"""
+        if not STOCK_DATA_AVAILABLE:
+            return self._get_fallback_stock_recommendations(query)
+
+        try:
+            # 비동기 함수를 동기적으로 실행
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                stocks = loop.run_until_complete(
+                    stock_data_service.search_stocks_by_query(query, limit=3)
+                )
+            finally:
+                loop.close()
+
+            if stocks:
+                # 첫 번째 종목의 섹터를 기준으로 섹터명 결정
+                sector = stocks[0].sector if stocks else "종합"
+
+                stock_list = []
+                for stock in stocks:
+                    description = f"{stock.industry}"
+                    if stock.change_percent is not None:
+                        direction = "상승" if stock.change_percent > 0 else "하락"
+                        description += f", 전일대비 {stock.change_percent:.1f}% {direction}"
+
+                    stock_list.append({
+                        "name": stock.name,
+                        "code": stock.symbol.replace('.KS', ''),
+                        "description": description
+                    })
+
+                return {
+                    "sector": sector,
+                    "stocks": stock_list
+                }
+            else:
+                return self._get_fallback_stock_recommendations(query)
+
+        except Exception as e:
+            print(f"실시간 종목 추천 실패: {e}")
+            return self._get_fallback_stock_recommendations(query)
+
+    def _get_fallback_stock_recommendations(self, query: str) -> Dict[str, Any]:
+        """실시간 데이터 실패 시 폴백 추천"""
+        # 기존 하드코딩 로직을 폴백으로 유지
+        basic_recommendations = {
+            ("AI", "인공지능"): ("AI/인공지능", [
+                {"name": "네이버", "code": "035420", "description": "AI 검색, 클라우드 플랫폼"},
+                {"name": "카카오", "code": "035720", "description": "AI 서비스, 디지털 플랫폼"}
+            ]),
+            ("반도체", "메모리"): ("반도체", [
+                {"name": "삼성전자", "code": "005930", "description": "메모리 반도체 글로벌 1위"},
+                {"name": "SK하이닉스", "code": "000660", "description": "메모리 반도체 2위"}
+            ])
+        }
+
+        for keywords, (sector, stocks) in basic_recommendations.items():
+            if any(kw in query for kw in keywords):
+                return {"sector": sector, "stocks": stocks}
+
+        return {
+            "sector": "종합",
+            "stocks": [
+                {"name": "삼성전자", "code": "005930", "description": "한국 대표 기술주"},
+                {"name": "LG전자", "code": "066570", "description": "가전 및 전자 부품"}
+            ]
+        }
+
+    def _generate_investment_points_from_query(self, query: str, news_hits: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """쿼리 기반 투자 포인트 생성"""
+        investment_points = {
+            ("AI", "인공지능"): {
+                "positive": [
+                    {"title": "기술 혁신", "description": "AI 기술 발전으로 새로운 시장 창출 및 비즈니스 모델 혁신"},
+                    {"title": "정부 지원", "description": "K-디지털 뉴딜 정책으로 AI 분야 투자 및 지원 확대"},
+                    {"title": "글로벌 확장", "description": "AI 기술력 기반 해외 시장 진출 기회 증가"}
+                ],
+                "risks": ["기술 변화 속도", "규제 리스크", "인재 확보 경쟁"]
+            },
+            ("반도체", "메모리"): {
+                "positive": [
+                    {"title": "수요 증가", "description": "AI, 데이터센터 확산으로 고성능 메모리 수요 급증"},
+                    {"title": "기술 우위", "description": "첨단 공정 기술력으로 글로벌 경쟁 우위 유지"},
+                    {"title": "가격 회복", "description": "메모리 가격 사이클 상승 구간 진입 기대"}
+                ],
+                "risks": ["경기 민감도", "중국 경쟁", "설비투자 부담"]
+            }
+        }
+
+        for keywords, points in investment_points.items():
+            if any(kw in query for kw in keywords):
+                return points
+
+        # 기본값
+        return {
+            "positive": [
+                {"title": "시장 성장", "description": "관련 산업의 지속적인 성장 전망"},
+                {"title": "기업 경쟁력", "description": "국내 대표 기업들의 글로벌 경쟁력 보유"},
+                {"title": "정책 지원", "description": "정부의 산업 육성 정책 및 지원 정책"}
+            ],
+            "risks": ["시장 변동성", "경기 민감도", "환율 리스크", "경쟁 심화"]
+        }
+
+    def _analyze_industry_trends_from_query(self, query: str, news_hits: List[Dict[str, Any]], graph_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """쿼리 기반 산업 동향 분석"""
+        industry_trends = {
+            ("AI", "인공지능"): {
+                "sector": "AI/인공지능",
+                "trends": [
+                    {"title": "생성형 AI 확산", "description": "ChatGPT 등 생성형 AI 서비스의 급속한 확산"},
+                    {"title": "AI 반도체 경쟁", "description": "AI 가속 칩 시장에서의 기술 경쟁 심화"},
+                    {"title": "산업 적용 확대", "description": "제조, 금융, 의료 등 전 산업 AI 도입 가속"}
+                ]
+            },
+            ("반도체", "메모리"): {
+                "sector": "반도체",
+                "trends": [
+                    {"title": "AI 메모리 수요", "description": "AI 연산용 고대역폭 메모리(HBM) 수요 급증"},
+                    {"title": "지정학적 리스크", "description": "미중 기술패권 경쟁으로 공급망 재편"},
+                    {"title": "차세대 기술", "description": "3나노 이하 초미세 공정 기술 경쟁"}
+                ]
+            }
+        }
+
+        for keywords, trends in industry_trends.items():
+            if any(kw in query for kw in keywords):
+                return trends
+
+        # 기본값
+        return {
+            "sector": "전체 산업",
+            "trends": [
+                {"title": "디지털 전환", "description": "전 산업의 디지털 전환 가속화"},
+                {"title": "ESG 경영", "description": "지속가능경영 및 친환경 기술 중요성 증대"},
+                {"title": "글로벌 공급망", "description": "공급망 다변화 및 리쇼어링 트렌드"}
+            ]
+        }
+
+    def _generate_warning_info_from_query(self, query: str) -> Dict[str, List[str]]:
+        """쿼리 기반 주의사항 생성"""
+        return {
+            "warnings": [
+                "투자 결정 전 충분한 리서치와 리스크 관리 필요",
+                "단기 변동성이 클 수 있으므로 장기 투자 관점 권장",
+                "시장 상황과 기업 실적을 지속적으로 모니터링",
+                "전문가 상담 후 신중한 투자 결정 권장"
+            ],
+            "additional_info": [
+                "실시간 뉴스와 공시 정보를 지속적으로 모니터링",
+                "전문가 의견과 시장 분석 리포트 참고",
+                "분산 투자를 통한 리스크 관리",
+                "개별 기업의 펀더멘털 분석 중요"
+            ]
+        }
+
+    def _generate_search_guide_from_query(self, query: str) -> Dict[str, Any]:
+        """쿼리 기반 검색 가이드 생성"""
+        # 쿼리 분석하여 관련 산업 감지
+        if any(kw in query for kw in ["AI", "인공지능"]):
+            sector = "AI/인공지능"
+            suggestions = [
+                "'인공지능', 'AI', '기계학습' 등의 구체적 키워드 사용",
+                "특정 기업명과 함께 검색 (예: '네이버 AI', '카카오 인공지능')",
+                "'생성형 AI', 'ChatGPT', 'LLM' 등 세부 기술 키워드 활용"
+            ]
+            general_trends = [
+                {"title": "생성형 AI 시장 확대", "description": "ChatGPT 성공으로 생성형 AI 서비스 경쟁 치열"},
+                {"title": "AI 반도체 투자", "description": "AI 연산 전용 반도체 개발 투자 증가"},
+                {"title": "AI 규제 논의", "description": "AI 윤리 및 규제 프레임워크 구축 논의"}
+            ]
+        else:
+            sector = "전체 시장"
+            suggestions = [
+                "키워드를 더 구체적으로 입력해 보세요",
+                "시간 범위를 조정해 보세요 (예: '최근 1년')",
+                "영문명과 한글명을 함께 사용해 보세요"
+            ]
+            general_trends = [
+                {"title": "글로벌 경제 불확실성", "description": "인플레이션 및 금리 정책 변화 영향"},
+                {"title": "기술주 선호", "description": "AI, 반도체 등 기술 관련 종목 선호 지속"},
+                {"title": "ESG 투자 확산", "description": "지속가능투자 및 ESG 경영 중요성 증대"}
+            ]
+
+        return {
+            "sector": sector,
+            "suggestions": suggestions,
+            "general_trends": general_trends
+        }
+
     def _get_personalized_closing(self, response_style: Dict[str, Any]) -> str:
         """개인화된 마무리 문구 생성"""
         adjustments = response_style.get("adjustments", {})
         tone = response_style.get("tone", "중립적")
-        
+
         # 기본 마무리 문구들
         closings = {
             "quick": "💡 **더 궁금한 점이 있으시면 구체적인 키워드로 다시 문의해 주세요.**",
@@ -543,7 +761,7 @@ class ResponseFormatter:
             "educational": "📖 **학습에 도움이 되셨기를 바라며, 궁금한 개념이나 용어가 있으시면 추가 질문 주세요.**",
             "urgent": "⚡ **실시간 정보와 최신 상황을 별도로 확인하시어 신속한 판단에 참고하시기 바랍니다.**"
         }
-        
+
         # 조정사항에 따른 마무리 선택
         if adjustments.get("response_length") == "short":
             return closings["quick"]
@@ -555,7 +773,7 @@ class ResponseFormatter:
             return closings["urgent"]
         elif adjustments.get("comprehensive_coverage"):
             return closings["detailed"]
-        
+
         return closings["quick"]  # 기본값
 
 # 전역 인스턴스

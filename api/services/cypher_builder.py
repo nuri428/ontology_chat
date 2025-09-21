@@ -22,7 +22,8 @@ def build_label_aware_search_cypher(keys_map: Dict[str, List[str]]) -> str:
         if label.lower() == "company": alias = "c"
         elif label.lower() == "news": alias = "nw"
         elif label.lower() == "event": alias = "e"
-        elif label.lower() == "weaponsystem": alias = "w"
+        elif label.lower() == "product": alias = "pr"
+        elif label.lower() == "weaponsystem": alias = "pr"  # 이전 호환성 유지
         elif label.lower() == "contract": alias = "ct"
         elif label.lower() == "program": alias = "p"
         elif label.lower() == "agency": alias = "ag"
