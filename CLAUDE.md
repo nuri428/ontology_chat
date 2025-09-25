@@ -1,5 +1,15 @@
 # Claude Code Configuration
 
+## ⚠️ 중요: Python 실행 방법 ⚠️
+
+### 이 프로젝트는 반드시 다음 방법으로 실행:
+1. **uv 사용**: `uv run python script.py`
+2. **Docker 컨테이너 내부**: `docker exec -it container_name python script.py`
+
+### ❌ 절대 하지 말아야 할 것:
+- `python` 또는 `python3` 직접 실행 금지
+- pyenv 환경에서 직접 실행 금지
+
 ## 프로젝트 규칙 (Project Rules)
 
 ### 1. 패키지 사용 원칙 (Package Usage Principles)

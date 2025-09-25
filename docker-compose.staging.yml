@@ -1,0 +1,223 @@
+version: '3.8'
+
+services:
+  # Ontology Chat API - Staging
+  api:
+    image: ghcr.io/your-org/ontology-chat:main
+    container_name: ontology-chat-api-staging
+    restart: unless-stopped
+    environment:
+      - ENV=staging
+      - DEBUG=false
+      - NEO4J_URI=bolt://neo4j-staging:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD_STAGING}
+      - OPENSEARCH_HOST=opensearch-staging
+      - OPENSEARCH_PORT=9200
+      - OLLAMA_HOST=ollama-staging
+      - OLLAMA_PORT=11434
+      - OLLAMA_MODEL=llama3.1:8b
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+      - LOG_LEVEL=INFO
+    ports:
+      - "8001:8000"  # Different port for staging
+    volumes:
+      - ./logs/staging:/app/logs
+    networks:
+      - ontology-staging
+    depends_on:
+      - neo4j-staging
+      - opensearch-staging
+      - ollama-staging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Streamlit UI - Staging
+  ui:
+    image: ghcr.io/your-org/ontology-chat:main
+    container_name: ontology-chat-ui-staging
+    restart: unless-stopped
+    command: ["uv", "run", "streamlit", "run", "ui/main.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    environment:
+      - ENV=staging
+      - API_BASE_URL=http://api:8000
+    ports:
+      - "8502:8501"  # Different port for staging
+    networks:
+      - ontology-staging
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Neo4j Database - Staging
+  neo4j-staging:
+    image: neo4j:5-community
+    container_name: neo4j-staging
+    restart: unless-stopped
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD_STAGING}
+      - NEO4J_dbms_memory_pagecache_size=512M
+      - NEO4J_dbms_memory_heap_initial__size=512M
+      - NEO4J_dbms_memory_heap_max__size=1G
+      - NEO4J_dbms_security_procedures_unrestricted=gds.*
+      - NEO4J_dbms_security_procedures_allowlist=gds.*
+    ports:
+      - "7475:7474"  # Different ports for staging
+      - "7688:7687"
+    volumes:
+      - neo4j_staging_data:/data
+      - neo4j_staging_logs:/logs
+      - ./data/neo4j/staging:/import
+    networks:
+      - ontology-staging
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD_STAGING} 'RETURN 1'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # OpenSearch - Staging
+  opensearch-staging:
+    image: opensearchproject/opensearch:2.11.0
+    container_name: opensearch-staging
+    restart: unless-stopped
+    environment:
+      - cluster.name=ontology-staging
+      - node.name=opensearch-staging
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx1g"
+      - plugins.security.disabled=true
+    ports:
+      - "9201:9200"  # Different port for staging
+      - "9601:9600"
+    volumes:
+      - opensearch_staging_data:/usr/share/opensearch/data
+    networks:
+      - ontology-staging
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=30s"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+
+  # Ollama LLM Service - Staging
+  ollama-staging:
+    image: ollama/ollama:latest
+    container_name: ollama-staging
+    restart: unless-stopped
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_MODELS=/root/.ollama/models
+    ports:
+      - "11435:11434"  # Different port for staging
+    volumes:
+      - ollama_staging_models:/root/.ollama
+    networks:
+      - ontology-staging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Reverse Proxy - Staging
+  nginx-staging:
+    image: nginx:alpine
+    container_name: nginx-staging
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/staging.conf:/etc/nginx/nginx.conf
+      - ./ssl/staging:/etc/ssl/staging:ro
+      - ./logs/nginx/staging:/var/log/nginx
+    networks:
+      - ontology-staging
+    depends_on:
+      - api
+      - ui
+
+  # Redis Cache - Staging
+  redis-staging:
+    image: redis:7-alpine
+    container_name: redis-staging
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6380:6379"  # Different port for staging
+    volumes:
+      - redis_staging_data:/data
+    networks:
+      - ontology-staging
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Monitoring Stack
+  prometheus-staging:
+    image: prom/prometheus:latest
+    container_name: prometheus-staging
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus/staging.yml:/etc/prometheus/prometheus.yml
+      - prometheus_staging_data:/prometheus
+    networks:
+      - ontology-staging
+
+  grafana-staging:
+    image: grafana/grafana:latest
+    container_name: grafana-staging
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD_STAGING}
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_staging_data:/var/lib/grafana
+      - ./monitoring/grafana/staging:/etc/grafana/provisioning
+    networks:
+      - ontology-staging
+
+volumes:
+  neo4j_staging_data:
+    driver: local
+  neo4j_staging_logs:
+    driver: local
+  opensearch_staging_data:
+    driver: local
+  ollama_staging_models:
+    driver: local
+  redis_staging_data:
+    driver: local
+  prometheus_staging_data:
+    driver: local
+  grafana_staging_data:
+    driver: local
+
+networks:
+  ontology-staging:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
