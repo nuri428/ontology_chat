@@ -9,9 +9,20 @@ tests/
 ├── unit/               # Unit tests for individual components
 ├── integration/        # Integration tests for API endpoints
 ├── performance/        # Performance benchmark tests
+├── analysis/           # Analysis and quality assessment tests
+├── experimental/       # Experimental and development tests
 ├── fixtures/           # Test fixtures and data
 └── run_tests.sh       # Test runner script
 ```
+
+### Directory Descriptions
+
+- **unit/**: 개별 컴포넌트의 단위 테스트 (키워드 추출, LLM, 캐시 등)
+- **integration/**: API 엔드포인트 및 서비스 통합 테스트 (FastAPI, MCP, 검색 등)
+- **performance/**: 성능 벤치마크 및 부하 테스트
+- **analysis/**: 시스템 품질 분석 및 개선점 도출 테스트
+- **experimental/**: 실험적 기능 및 프로토타입 테스트 (LangGraph, 품질 실험 등)
+- **fixtures/**: 테스트용 데이터 및 픽스처
 
 ## Running Tests
 
@@ -35,6 +46,12 @@ pytest -m integration
 
 # Performance tests
 pytest -m performance
+
+# Analysis tests
+pytest tests/analysis/ -v
+
+# Experimental tests
+pytest tests/experimental/ -v
 
 # Quick tests (exclude slow)
 pytest -m "not slow"

@@ -45,6 +45,14 @@ case $TEST_TYPE in
     performance)
         run_test_suite "performance" "Performance Tests"
         ;;
+    analysis)
+        echo -e "${YELLOW}Running Analysis Tests...${NC}"
+        pytest tests/analysis/ -v --tb=short
+        ;;
+    experimental)
+        echo -e "${YELLOW}Running Experimental Tests...${NC}"
+        pytest tests/experimental/ -v --tb=short
+        ;;
     slow)
         run_test_suite "slow" "Slow Tests"
         ;;
@@ -61,12 +69,14 @@ case $TEST_TYPE in
         run_test_suite "all" "All Tests"
         ;;
     *)
-        echo "Usage: $0 [unit|integration|performance|slow|coverage|quick|all]"
+        echo "Usage: $0 [unit|integration|performance|analysis|experimental|slow|coverage|quick|all]"
         echo ""
         echo "Options:"
         echo "  unit         - Run unit tests only"
         echo "  integration  - Run integration tests only"
         echo "  performance  - Run performance benchmarks"
+        echo "  analysis     - Run analysis and quality assessment tests"
+        echo "  experimental - Run experimental and development tests"
         echo "  slow         - Run slow tests only"
         echo "  coverage     - Run all tests with coverage report"
         echo "  quick        - Run all tests except slow and performance"

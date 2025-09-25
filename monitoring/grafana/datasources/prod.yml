@@ -1,0 +1,47 @@
+apiVersion: 1
+
+datasources:
+  # Prometheus (프로덕션환경)
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: "15s"
+      queryTimeout: "60s"
+      httpMethod: "POST"
+      cacheLevel: 'High'
+
+  # External Langfuse (만약 외부에서 실행중인 경우)
+  - name: Langfuse-Analytics
+    type: postgres
+    access: proxy
+    url: ${LANGFUSE_DB_HOST:-langfuse-db:5432}
+    database: ${LANGFUSE_DB_NAME:-langfuse}
+    user: ${LANGFUSE_DB_USER:-langfuse}
+    secureJsonData:
+      password: "${LANGFUSE_DB_PASSWORD:-langfuse_password}"
+    jsonData:
+      sslmode: "require"
+      maxOpenConns: 10
+      maxIdleConns: 2
+      maxIdleConnsAuto: true
+      connMaxLifetime: 14400
+      postgresVersion: 1500
+      timescaledb: false
+
+  # External Redis (외부 Redis 서버 연결용)
+  - name: Redis-External
+    type: redis-datasource
+    access: proxy
+    url: ${REDIS_URL:-redis://192.168.0.10:6379}
+    jsonData:
+      client: standalone
+      poolSize: 5
+      timeout: 10
+      pingInterval: 30
+      pipelineWindow: 0
+    secureJsonData:
+      password: "${REDIS_PASSWORD:-}"

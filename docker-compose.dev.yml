@@ -86,10 +86,129 @@ services:
     restart: unless-stopped
     command: ["uv", "run", "streamlit", "run", "ui/main.py", "--server.address", "0.0.0.0", "--server.port", "8501", "--server.runOnSave", "true"]
 
+  # 모니터링 - Prometheus
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: ontology-chat-prometheus-dev
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data-dev:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    networks:
+      - ontology-network
+    restart: unless-stopped
+
+  # 모니터링 - Grafana
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: ontology-chat-grafana-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-dev_admin_2024}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_DOMAIN=localhost
+      - GF_SMTP_ENABLED=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,redis-datasource
+      - GF_LOG_LEVEL=debug
+    volumes:
+      - grafana-data-dev:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    networks:
+      - ontology-network
+    restart: unless-stopped
+
+  # Node Exporter (시스템 메트릭)
+  node_exporter:
+    image: prom/node-exporter:v1.6.1
+    container_name: ontology-chat-node-exporter-dev
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - ontology-network
+    restart: unless-stopped
+
+  # Redis Exporter (Redis 메트릭)
+  redis_exporter:
+    image: oliver006/redis_exporter:v1.54.0
+    container_name: ontology-chat-redis-exporter-dev
+    ports:
+      - "9121:9121"
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    depends_on:
+      - redis
+    networks:
+      - ontology-network
+    restart: unless-stopped
+
+  # Alertmanager (알림 관리)
+  alertmanager:
+    image: prom/alertmanager:v0.25.0
+    container_name: ontology-chat-alertmanager-dev
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data-dev:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+      - '--cluster.listen-address='
+    networks:
+      - ontology-network
+    restart: unless-stopped
+
+  # Jaeger (분산 추적)
+  jaeger:
+    image: jaegertracing/all-in-one:1.49
+    container_name: ontology-chat-jaeger-dev
+    ports:
+      - "6831:6831/udp"  # Jaeger agent thrift compact
+      - "6832:6832/udp"  # Jaeger agent thrift binary
+      - "5778:5778"      # Jaeger agent config endpoint
+      - "16686:16686"    # Jaeger query UI
+      - "14250:14250"    # Jaeger GRPC
+      - "14268:14268"    # Jaeger HTTP
+      - "14269:14269"    # Jaeger HTTP admin
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - ontology-network
+    restart: unless-stopped
+
 
 
 volumes:
   redis-data:
+  prometheus-data-dev:
+  grafana-data-dev:
+  alertmanager-data-dev:
 
 networks:
   ontology-network:
