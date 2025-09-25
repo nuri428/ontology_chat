@@ -1,0 +1,176 @@
+groups:
+  - name: ontology_chat_alerts
+    rules:
+      # High-level service availability
+      - alert: ServiceDown
+        expr: up{job="ontology-chat-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ontology Chat API is down"
+          description: "The Ontology Chat API has been down for more than 1 minute."
+
+      # Response time degradation
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="ontology-chat-api"}[5m])) > 2.0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is {{ $value }}s, which exceeds 2.0s threshold."
+
+      # A-grade quality degradation
+      - alert: QualityScoreDegradation
+        expr: ontology_chat_quality_score < 0.900
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Quality score below A-grade threshold"
+          description: "Quality score has dropped to {{ $value }}, below the required 0.900 A-grade threshold."
+
+      # Cache hit rate degradation
+      - alert: LowCacheHitRate
+        expr: ontology_chat_cache_hit_rate < 0.6
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cache hit rate is low"
+          description: "Cache hit rate has dropped to {{ $value | humanizePercentage }}, impacting performance."
+
+      # Circuit breaker activation
+      - alert: CircuitBreakerOpen
+        expr: ontology_chat_circuit_breaker_state{state="open"} > 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuit breaker {{ $labels.name }} is open"
+          description: "Circuit breaker {{ $labels.name }} has been opened, indicating service degradation."
+
+      # Memory usage
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }}, exceeding 85% threshold."
+
+      # CPU usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}%, exceeding 80% threshold."
+
+      # Redis connection issues
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis instance is not responding, L2 cache unavailable."
+
+      # Neo4j connection issues
+      - alert: Neo4jDown
+        expr: neo4j_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Neo4j is down"
+          description: "Neo4j database is not responding, graph queries unavailable."
+
+      # OpenSearch/Elasticsearch issues
+      - alert: OpenSearchDown
+        expr: elasticsearch_cluster_health_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OpenSearch is down"
+          description: "OpenSearch cluster is not responding, vector search unavailable."
+
+      # Error rate alerts
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }}, exceeding 5% threshold."
+
+      # Disk space alerts
+      - alert: HighDiskUsage
+        expr: (node_filesystem_size_bytes{fstype!="tmpfs"} - node_filesystem_avail_bytes{fstype!="tmpfs"}) / node_filesystem_size_bytes{fstype!="tmpfs"} > 0.85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk usage"
+          description: "Disk usage on {{ $labels.device }} is {{ $value | humanizePercentage }}, exceeding 85% threshold."
+
+  - name: performance_degradation
+    rules:
+      # Context retrieval performance
+      - alert: SlowContextRetrieval
+        expr: histogram_quantile(0.95, rate(ontology_chat_context_duration_seconds_bucket[5m])) > 1.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow context retrieval"
+          description: "Context retrieval 95th percentile is {{ $value }}s, exceeding 1.5s target."
+
+      # LLM response time
+      - alert: SlowLLMResponse
+        expr: histogram_quantile(0.95, rate(ontology_chat_llm_duration_seconds_bucket[5m])) > 3.0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow LLM response"
+          description: "LLM response 95th percentile is {{ $value }}s, exceeding 3.0s threshold."
+
+      # Cache L1 memory pressure
+      - alert: CacheL1MemoryPressure
+        expr: ontology_chat_cache_l1_memory_usage_percent > 90
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "L1 cache memory pressure"
+          description: "L1 cache memory usage is {{ $value }}%, consider increasing cache size."
+
+  - name: business_metrics
+    rules:
+      # Request volume alerts
+      - alert: LowRequestVolume
+        expr: rate(http_requests_total{job="ontology-chat-api"}[1h]) < 0.1
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Unusually low request volume"
+          description: "Request rate is {{ $value }} req/sec, which is unusually low."
+
+      # High request volume
+      - alert: HighRequestVolume
+        expr: rate(http_requests_total{job="ontology-chat-api"}[5m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request volume"
+          description: "Request rate is {{ $value }} req/sec, consider scaling."

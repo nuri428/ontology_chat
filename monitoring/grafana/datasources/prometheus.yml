@@ -6,4 +6,25 @@ datasources:
     access: proxy
     url: http://prometheus:9090
     isDefault: true
-    editable: true
+    editable: false
+    jsonData:
+      timeInterval: "5s"
+      queryTimeout: "60s"
+      httpMethod: "GET"
+
+  - name: Langfuse
+    type: postgres
+    access: proxy
+    url: langfuse-db:5432
+    database: langfuse
+    user: langfuse
+    secureJsonData:
+      password: "langfuse_password"
+    jsonData:
+      sslmode: "disable"
+      maxOpenConns: 100
+      maxIdleConns: 100
+      maxIdleConnsAuto: true
+      connMaxLifetime: 14400
+      postgresVersion: 1500
+      timescaledb: false

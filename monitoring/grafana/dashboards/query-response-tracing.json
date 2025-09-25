@@ -1,0 +1,316 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Query-Response Tracing Dashboard",
+    "tags": ["tracing", "query", "response", "user"],
+    "timezone": "browser",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "실시간 질의 처리 현황",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "ontology_active_queries",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 5
+                },
+                {
+                  "color": "red",
+                  "value": 15
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "활성 사용자 세션",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "ontology_active_user_sessions",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "의도별 질의 분포 (최근 1시간)",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum by (intent) (increase(ontology_total_queries[1h]))",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 4,
+        "title": "질의 응답 시간 분포",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(ontology_response_time_seconds_bucket[5m]))",
+            "legendFormat": "P50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(ontology_response_time_seconds_bucket[5m]))",
+            "legendFormat": "P95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(ontology_response_time_seconds_bucket[5m]))",
+            "legendFormat": "P99",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 5,
+        "title": "처리 단계별 성능",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "avg by (stage) (rate(ontology_stage_processing_seconds_sum[5m]) / rate(ontology_stage_processing_seconds_count[5m]))",
+            "legendFormat": "{{stage}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 6,
+        "title": "검색 결과 수 분포",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "avg by (search_type) (rate(ontology_search_results_count_sum[5m]) / rate(ontology_search_results_count_count[5m]))",
+            "legendFormat": "{{search_type}}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        }
+      },
+      {
+        "id": 7,
+        "title": "캐시 성능",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(ontology_cache_operations{operation=\"hit\"}[5m])",
+            "legendFormat": "Cache Hits",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(ontology_cache_operations{operation=\"miss\"}[5m])",
+            "legendFormat": "Cache Misses",
+            "refId": "B"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        }
+      },
+      {
+        "id": 8,
+        "title": "오류 발생 추세",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "sum by (error_type) (rate(ontology_errors_total[5m]))",
+            "legendFormat": "{{error_type}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 24
+        }
+      },
+      {
+        "id": 9,
+        "title": "사용자 타입별 활동",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "sum by (user_type) (increase(ontology_total_queries[1h]))",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 32
+        }
+      },
+      {
+        "id": 10,
+        "title": "품질 점수 추세",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "ontology_quality_score",
+            "legendFormat": "{{metric_type}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 1,
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.8
+                },
+                {
+                  "color": "green",
+                  "value": 0.9
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 32
+        }
+      },
+      {
+        "id": 11,
+        "title": "LLM 호출 통계",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "sum by (model, operation) (increase(ontology_llm_calls_total[1h]))",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 40
+        }
+      },
+      {
+        "id": 12,
+        "title": "토큰 사용량 추세",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(ontology_llm_tokens_total[5m])",
+            "legendFormat": "{{model}} - {{token_type}}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 40
+        }
+      }
+    ]
+  },
+  "overwrite": true
+}

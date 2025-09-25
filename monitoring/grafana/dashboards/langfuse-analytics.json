@@ -1,0 +1,297 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Langfuse LLM Analytics",
+    "tags": ["langfuse", "llm", "analytics"],
+    "timezone": "browser",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "refresh": "1m",
+    "panels": [
+      {
+        "id": 1,
+        "title": "총 LLM 호출 수 (24시간)",
+        "type": "stat",
+        "targets": [
+          {
+            "datasource": "Langfuse",
+            "rawSql": "SELECT COUNT(*) FROM traces WHERE created_at >= NOW() - INTERVAL '24 hours'",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "평균 응답 시간",
+        "type": "stat",
+        "targets": [
+          {
+            "datasource": "Langfuse",
+            "rawSql": "SELECT AVG(EXTRACT(EPOCH FROM (updated_at - created_at))) as avg_response_time FROM traces WHERE created_at >= NOW() - INTERVAL '24 hours' AND updated_at IS NOT NULL",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 2
+                },
+                {
+                  "color": "red",
+                  "value": 5
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "토큰 사용량",
+        "type": "stat",
+        "targets": [
+          {
+            "datasource": "Langfuse",
+            "rawSql": "SELECT SUM(COALESCE((metadata->>'total_tokens')::integer, 0)) as total_tokens FROM observations WHERE type = 'GENERATION' AND created_at >= NOW() - INTERVAL '24 hours'",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 4,
+        "title": "성공률",
+        "type": "stat",
+        "targets": [
+          {
+            "datasource": "Langfuse",
+            "rawSql": "SELECT (COUNT(CASE WHEN level != 'ERROR' THEN 1 END) * 100.0 / COUNT(*)) as success_rate FROM traces WHERE created_at >= NOW() - INTERVAL '24 hours'",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 90
+                },
+                {
+                  "color": "green",
+                  "value": 95
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        }
+      },
+      {
+        "id": 5,
+        "title": "시간별 LLM 호출 추이",
+        "type": "timeseries",
+        "targets": [
+          {
+            "datasource": "Langfuse",
+            "rawSql": "SELECT DATE_TRUNC('hour', created_at) as time, COUNT(*) as calls FROM traces WHERE created_at >= NOW() - INTERVAL '24 hours' GROUP BY DATE_TRUNC('hour', created_at) ORDER BY time",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 6,
+        "title": "LLM 모델별 사용 분포",
+        "type": "piechart",
+        "targets": [
+          {
+            "datasource": "Langfuse",
+            "rawSql": "SELECT COALESCE(model, 'Unknown') as model, COUNT(*) as count FROM observations WHERE type = 'GENERATION' AND created_at >= NOW() - INTERVAL '24 hours' GROUP BY model ORDER BY count DESC",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 7,
+        "title": "응답 시간 분포 (P50, P95, P99)",
+        "type": "timeseries",
+        "targets": [
+          {
+            "datasource": "Langfuse",
+            "rawSql": "SELECT DATE_TRUNC('hour', created_at) as time, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (updated_at - created_at))) as p50, PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (updated_at - created_at))) as p95, PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (updated_at - created_at))) as p99 FROM traces WHERE created_at >= NOW() - INTERVAL '24 hours' AND updated_at IS NOT NULL GROUP BY DATE_TRUNC('hour', created_at) ORDER BY time",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 16
+        }
+      },
+      {
+        "id": 8,
+        "title": "사용자별 활동",
+        "type": "table",
+        "targets": [
+          {
+            "datasource": "Langfuse",
+            "rawSql": "SELECT user_id, COUNT(*) as total_calls, AVG(EXTRACT(EPOCH FROM (updated_at - created_at))) as avg_response_time, COUNT(CASE WHEN level = 'ERROR' THEN 1 END) as error_count FROM traces WHERE created_at >= NOW() - INTERVAL '24 hours' AND user_id IS NOT NULL GROUP BY user_id ORDER BY total_calls DESC LIMIT 10",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 24
+        }
+      },
+      {
+        "id": 9,
+        "title": "최근 오류",
+        "type": "table",
+        "targets": [
+          {
+            "datasource": "Langfuse",
+            "rawSql": "SELECT created_at, name, user_id, SUBSTRING(input::text, 1, 100) as input_preview FROM traces WHERE level = 'ERROR' AND created_at >= NOW() - INTERVAL '24 hours' ORDER BY created_at DESC LIMIT 20",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 24
+        }
+      },
+      {
+        "id": 10,
+        "title": "LLM 작업 타입별 성능",
+        "type": "table",
+        "targets": [
+          {
+            "datasource": "Langfuse",
+            "rawSql": "SELECT name as operation, COUNT(*) as total_calls, AVG(EXTRACT(EPOCH FROM (updated_at - created_at))) as avg_response_time, (COUNT(CASE WHEN level != 'ERROR' THEN 1 END) * 100.0 / COUNT(*)) as success_rate FROM traces WHERE created_at >= NOW() - INTERVAL '24 hours' GROUP BY name ORDER BY total_calls DESC",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "avg_response_time"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "success_rate"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "percent"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 32
+        }
+      }
+    ]
+  },
+  "overwrite": true
+}

@@ -1,0 +1,73 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'ontology_chat_production'
+    environment: 'production'
+
+rule_files:
+  - "rules/*.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  # Ontology Chat API Application
+  - job_name: 'ontology-chat-api'
+    static_configs:
+      - targets: ['ontology-chat-api-dev:8000']
+    metrics_path: '/monitoring/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 10s
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter (System Metrics)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node_exporter:9100']
+    scrape_interval: 15s
+
+  # Redis Exporter
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis_exporter:9121']
+    scrape_interval: 15s
+
+  # Neo4j Exporter (if available)
+  - job_name: 'neo4j'
+    static_configs:
+      - targets: ['neo4j:2004']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # OpenSearch/Elasticsearch Exporter
+  - job_name: 'opensearch'
+    static_configs:
+      - targets: ['opensearch:9200']
+    metrics_path: '/_prometheus/metrics'
+    scrape_interval: 30s
+
+  # Health Check Endpoints
+  - job_name: 'health-checks'
+    static_configs:
+      - targets: ['ontology-chat-api-dev:8000']
+    metrics_path: '/health/live'
+    scrape_interval: 30s
+
+  # Cache Performance Monitoring
+  - job_name: 'cache-metrics'
+    static_configs:
+      - targets: ['ontology-chat-api-dev:8000']
+    metrics_path: '/metrics/cache/prometheus'
+    scrape_interval: 15s
+
+remote_write:
+  # Optional: Configure remote storage if needed
+  # - url: "https://prometheus-remote-storage.example.com/api/v1/write"
