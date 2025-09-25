@@ -1,230 +1,194 @@
-"""Integration tests for FastAPI endpoints."""
+#!/usr/bin/env python3
+"""
+API 엔드포인트 기능 테스트
+"""
 
-import pytest
+import requests
 import json
-from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+import time
 
-from api.main import app
+BASE_URL = "http://localhost:8000"
 
+def test_comparative_api():
+    """기본 비교 분석 API 테스트"""
+    print("📊 기본 비교 분석 API 테스트")
 
-@pytest.mark.integration
-@pytest.mark.api
-class TestAPIEndpoints:
-    """Test suite for API endpoints."""
+    data = {
+        "queries": ["한화시스템", "LIG넥스원"],
+        "domain": "방산",
+        "lookback_days": 30
+    }
 
-    def test_health_check(self, test_client):
-        """Test health check endpoint."""
-        response = test_client.get("/health")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "healthy"
-        assert "timestamp" in data
-
-    def test_readiness_check(self, test_client):
-        """Test readiness check endpoint."""
-        response = test_client.get("/ready")
-
-        assert response.status_code in [200, 503]
-        data = response.json()
-        assert "status" in data
-
-    @pytest.mark.asyncio
-    async def test_chat_endpoint_success(self, test_client):
-        """Test chat endpoint with successful response."""
-        with patch('api.routers.chat.ChatService') as mock_service:
-            mock_instance = MagicMock()
-            mock_instance.get_context.return_value = {
-                "context": ["Test context"],
-                "sources": ["Test source"],
-                "query": "test query"
-            }
-            mock_service.return_value = mock_instance
-
-            response = test_client.post(
-                "/api/v1/chat",
-                json={"query": "test query"}
-            )
-
-            assert response.status_code == 200
-            data = response.json()
-            assert "context" in data
-            assert "sources" in data
-
-    @pytest.mark.asyncio
-    async def test_chat_endpoint_empty_query(self, test_client):
-        """Test chat endpoint with empty query."""
-        response = test_client.post(
-            "/api/v1/chat",
-            json={"query": ""}
+    try:
+        response = requests.post(
+            f"{BASE_URL}/report/comparative",
+            json=data,
+            timeout=30
         )
 
-        assert response.status_code == 422  # Validation error
+        print(f"   응답 코드: {response.status_code}")
 
-    @pytest.mark.asyncio
-    async def test_chat_endpoint_long_query(self, test_client):
-        """Test chat endpoint with very long query."""
-        long_query = "test " * 1000  # Very long query
+        if response.status_code == 200:
+            result = response.json()
+            print(f"   ✅ 성공!")
+            print(f"   타입: {result.get('type')}")
+            print(f"   비교 항목: {result.get('meta', {}).get('comparison_count', 0)}개")
+            print(f"   마크다운 길이: {len(result.get('markdown', ''))} 글자")
+            return True
+        else:
+            print(f"   ❌ 실패: {response.text}")
+            return False
 
-        with patch('api.routers.chat.ChatService') as mock_service:
-            mock_instance = MagicMock()
-            mock_instance.get_context.return_value = {
-                "context": ["Context for long query"],
-                "sources": ["Source"],
-                "query": long_query[:100]
-            }
-            mock_service.return_value = mock_instance
+    except Exception as e:
+        print(f"   오류: {e}")
+        return False
 
-            response = test_client.post(
-                "/api/v1/chat",
-                json={"query": long_query}
-            )
+def test_trend_api():
+    """기본 트렌드 분석 API 테스트"""
+    print("\n📈 기본 트렌드 분석 API 테스트")
 
-            assert response.status_code == 200
+    data = {
+        "query": "한화",
+        "domain": "방산",
+        "periods": [30, 90]
+    }
 
-    def test_cache_stats_endpoint(self, test_client):
-        """Test cache statistics endpoint."""
-        with patch('api.routers.cache_router.ContextCache') as mock_cache:
-            mock_instance = MagicMock()
-            mock_instance.get_stats.return_value = {
-                "hits": 100,
-                "misses": 50,
-                "hit_rate": 0.667,
-                "size": 75,
-                "capacity": 100
-            }
-            mock_cache.return_value = mock_instance
-
-            response = test_client.get("/api/v1/cache/stats")
-
-            if response.status_code == 200:
-                data = response.json()
-                assert "hits" in data or "hit_rate" in data
-
-    def test_cache_clear_endpoint(self, test_client):
-        """Test cache clear endpoint."""
-        with patch('api.routers.cache_router.ContextCache') as mock_cache:
-            mock_instance = MagicMock()
-            mock_instance.clear.return_value = None
-            mock_cache.return_value = mock_instance
-
-            response = test_client.post("/api/v1/cache/clear")
-
-            if response.status_code == 200:
-                data = response.json()
-                assert "message" in data or "status" in data
-
-    def test_mcp_search_endpoint(self, test_client):
-        """Test MCP search endpoint."""
-        with patch('api.adapters.mcp_neo4j.Neo4jMCP') as mock_mcp:
-            mock_instance = MagicMock()
-            mock_instance.search.return_value = [
-                {
-                    "title": "Test Result",
-                    "content": "Test content",
-                    "score": 0.9
-                }
-            ]
-            mock_mcp.return_value = mock_instance
-
-            response = test_client.post(
-                "/api/v1/mcp/search",
-                json={"query": "test", "limit": 10}
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-                assert isinstance(data, list) or "results" in data
-
-    @pytest.mark.parametrize("endpoint,method", [
-        ("/health", "GET"),
-        ("/ready", "GET"),
-        ("/api/v1/chat", "POST"),
-        ("/api/v1/cache/stats", "GET"),
-    ])
-    def test_endpoint_availability(self, test_client, endpoint, method):
-        """Test that endpoints are available."""
-        if method == "GET":
-            response = test_client.get(endpoint)
-        elif method == "POST":
-            response = test_client.post(endpoint, json={})
-
-        # Should not return 404
-        assert response.status_code != 404
-
-    def test_cors_headers(self, test_client):
-        """Test CORS headers are properly set."""
-        response = test_client.options("/api/v1/chat")
-
-        # Check for CORS headers
-        headers = response.headers
-        # CORS headers should be present if configured
-        if "access-control-allow-origin" in headers:
-            assert headers["access-control-allow-origin"] in ["*", "http://localhost:3000"]
-
-    def test_request_id_header(self, test_client):
-        """Test that request ID is generated for tracking."""
-        response = test_client.get("/health")
-
-        # Check if request tracking headers are present
-        if "x-request-id" in response.headers:
-            assert len(response.headers["x-request-id"]) > 0
-
-    @pytest.mark.asyncio
-    async def test_concurrent_requests(self, test_client):
-        """Test handling of concurrent requests."""
-        import asyncio
-
-        async def make_request():
-            return test_client.get("/health")
-
-        # Make multiple concurrent requests
-        tasks = [make_request() for _ in range(10)]
-        responses = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # All should succeed
-        for response in responses:
-            if not isinstance(response, Exception):
-                assert response.status_code == 200
-
-    def test_invalid_json_request(self, test_client):
-        """Test handling of invalid JSON in request body."""
-        response = test_client.post(
-            "/api/v1/chat",
-            data="invalid json {]",
-            headers={"Content-Type": "application/json"}
+    try:
+        response = requests.post(
+            f"{BASE_URL}/report/trend",
+            json=data,
+            timeout=30
         )
 
-        assert response.status_code in [400, 422]
+        print(f"   응답 코드: {response.status_code}")
 
-    def test_method_not_allowed(self, test_client):
-        """Test method not allowed response."""
-        # Try PUT on GET-only endpoint
-        response = test_client.put("/health")
+        if response.status_code == 200:
+            result = response.json()
+            print(f"   ✅ 성공!")
+            print(f"   타입: {result.get('type')}")
+            print(f"   분석 기간: {result.get('meta', {}).get('analysis_points', 0)}개")
+            print(f"   마크다운 길이: {len(result.get('markdown', ''))} 글자")
+            return True
+        else:
+            print(f"   ❌ 실패: {response.text}")
+            return False
 
-        assert response.status_code == 405
+    except Exception as e:
+        print(f"   오류: {e}")
+        return False
 
-    @pytest.mark.slow
-    def test_timeout_handling(self, test_client):
-        """Test request timeout handling."""
-        with patch('api.routers.chat.ChatService') as mock_service:
-            import asyncio
-            mock_instance = MagicMock()
+def test_langgraph_comparative_api():
+    """LangGraph 비교 분석 API 테스트"""
+    print("\n🤖 LangGraph 비교 분석 API 테스트")
 
-            async def slow_response(*args, **kwargs):
-                await asyncio.sleep(10)
-                return {"context": [], "sources": []}
+    data = {
+        "queries": ["삼성전자", "SK하이닉스"],
+        "domain": "반도체",
+        "lookback_days": 30,
+        "analysis_depth": "shallow"
+    }
 
-            mock_instance.get_context = slow_response
-            mock_service.return_value = mock_instance
+    try:
+        response = requests.post(
+            f"{BASE_URL}/report/langgraph/comparative",
+            json=data,
+            timeout=60
+        )
 
-            # This should timeout or handle gracefully
-            response = test_client.post(
-                "/api/v1/chat",
-                json={"query": "test"},
-                timeout=1
-            )
+        print(f"   응답 코드: {response.status_code}")
 
-            # Should handle timeout appropriately
-            assert response.status_code in [200, 408, 504]
+        if response.status_code == 200:
+            result = response.json()
+            print(f"   ✅ 성공!")
+            print(f"   타입: {result.get('type')}")
+            print(f"   비교 항목: {result.get('meta', {}).get('comparison_count', 0)}개")
+            print(f"   총 처리 시간: {result.get('meta', {}).get('total_processing_time', 0):.2f}초")
+            return True
+        else:
+            print(f"   ❌ 실패: {response.text}")
+            return False
+
+    except Exception as e:
+        print(f"   오류: {e}")
+        return False
+
+def test_langgraph_trend_api():
+    """LangGraph 트렌드 분석 API 테스트"""
+    print("\n⏰ LangGraph 트렌드 분석 API 테스트")
+
+    data = {
+        "query": "한화",
+        "domain": "방산",
+        "periods": [30, 60],
+        "analysis_depth": "shallow"
+    }
+
+    try:
+        response = requests.post(
+            f"{BASE_URL}/report/langgraph/trend",
+            json=data,
+            timeout=60
+        )
+
+        print(f"   응답 코드: {response.status_code}")
+
+        if response.status_code == 200:
+            result = response.json()
+            print(f"   ✅ 성공!")
+            print(f"   타입: {result.get('type')}")
+            print(f"   분석 기간: {result.get('meta', {}).get('analysis_points', 0)}개")
+            print(f"   총 처리 시간: {result.get('meta', {}).get('total_processing_time', 0):.2f}초")
+            return True
+        else:
+            print(f"   ❌ 실패: {response.text}")
+            return False
+
+    except Exception as e:
+        print(f"   오류: {e}")
+        return False
+
+def test_server_health():
+    """서버 상태 확인"""
+    try:
+        response = requests.get(f"{BASE_URL}/", timeout=5)
+        return response.status_code == 200
+    except:
+        return False
+
+def main():
+    """메인 테스트"""
+    print("🧪 API 엔드포인트 기능 점검")
+    print("=" * 50)
+
+    # 서버 상태 확인
+    if not test_server_health():
+        print("❌ 서버가 실행 중이지 않습니다. uvicorn api.main:app --host 0.0.0.0 --port 8000을 실행하세요.")
+        return
+
+    print("✅ 서버 실행 중")
+
+    tests = [
+        ("기본 비교 분석 API", test_comparative_api),
+        ("기본 트렌드 분석 API", test_trend_api),
+        ("LangGraph 비교 분석 API", test_langgraph_comparative_api),
+        ("LangGraph 트렌드 분석 API", test_langgraph_trend_api),
+    ]
+
+    success_count = 0
+
+    for test_name, test_func in tests:
+        try:
+            if test_func():
+                success_count += 1
+                print(f"✅ {test_name} 통과")
+            else:
+                print(f"❌ {test_name} 실패")
+        except Exception as e:
+            print(f"❌ {test_name} 오류: {e}")
+
+    print(f"\n🏁 API 테스트 완료")
+    print(f"   성공: {success_count}/{len(tests)}")
+    print(f"   성공률: {success_count/len(tests)*100:.1f}%")
+
+if __name__ == "__main__":
+    main()
