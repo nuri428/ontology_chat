@@ -26,12 +26,17 @@ class Settings(BaseSettings):
     
     # Ollama LLM 설정
     ollama_host: str = "localhost"
-    ollama_model: str = "gpt-oss:latest"
+    ollama_model: str = "llama3.1:8b"
 
     # BGE-M3 임베딩 설정 (원격 서버)
     bge_m3_host: str = "192.168.0.10"
     bge_m3_model: str = "bge-m3:latest"
     enable_hybrid_search: bool = True
+
+    # Langfuse 트레이싱 설정
+    langfuse_secret_key: str | None = None
+    langfuse_public_key: str | None = None
+    langfuse_host: str | None = None
     
     neo4j_search_cypher: Optional[str] = None    
     graph_search_keys: Optional[str] = None  # JSON 문자열

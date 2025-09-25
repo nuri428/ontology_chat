@@ -3,11 +3,15 @@ import json
 import sys
 sys.path.insert(0, '/home/nuri/.local/lib/python3.10/site-packages')
 from fastapi import Body, Depends, FastAPI, HTTPException
+from fastapi.encoders import jsonable_encoder
 from fastapi_mcp import FastApiMCP
 from api.logging import setup_logging
 from api.config import settings
-from api.routers import health
+from api.routers import health, cache_router, metrics_router
+from api.routers.monitoring_router import router as monitoring_router
+from api.monitoring.middleware import PrometheusMiddleware, HealthMonitoringMiddleware
 from api.services.chat_service import ChatService
+from api.services.context_cache import context_cache
 from api.services.report_service import (
     ReportRequest,
     ReportResponse,
@@ -15,9 +19,33 @@ from api.services.report_service import (
 )
 from api.services.langgraph_report_service import LangGraphReportEngine
 from api.services.stock_data_service import stock_data_service
+
+# Langfuse 트레이싱
+try:
+    from api.utils.langfuse_tracer import trace_llm
+    LANGFUSE_AVAILABLE = True
+except ImportError:
+    LANGFUSE_AVAILABLE = False
+    def trace_llm(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
 from api.mcp import router as mcp_router  # ← 추가
 from pydantic import BaseModel
 from typing import List, Optional
+import numpy as np
+
+# Custom JSON encoder to handle numpy types
+def custom_jsonable_encoder(obj):
+    """Custom JSON encoder that handles numpy types."""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    else:
+        return jsonable_encoder(obj)
 
 logger = setup_logging()
 app = FastAPI(title="ontolog_chat", version="0.1.0")
@@ -33,8 +61,19 @@ mcp = FastApiMCP(
 mcp.mount_sse(app, mount_path="/mcp/sse")
 mcp.mount_http(app, mount_path="/mcp/http")
 
+# Add monitoring middleware
+app.add_middleware(PrometheusMiddleware)
+app.add_middleware(HealthMonitoringMiddleware)
+
 app.include_router(health.router)
 app.include_router(mcp_router.router)  # ← 추가
+app.include_router(cache_router.router)  # 캐시 관리 라우터
+app.include_router(metrics_router.router)  # 모니터링 메트릭 라우터
+app.include_router(monitoring_router)  # 질의-응답 트레이싱 라우터
+
+# 분석 대시보드 라우터 추가
+from api.routers import analytics_router
+app.include_router(analytics_router.router)  # 성능 분석 대시보드 라우터
 
 chat_service = ChatService()
 report_service = ReportService()
@@ -60,18 +99,45 @@ def get_langgraph_engine() -> LangGraphReportEngine:
 
 
 @app.post("/chat")
-async def chat(query: str = Body(..., embed=True)):
+async def chat(
+    query: str = Body(..., embed=True),
+    user_id: str = Body("anonymous", embed=True),
+    session_id: Optional[str] = Body(None, embed=True)
+):
     """
-    온톨로지 기반 챗봇과 대화합니다.
+    온톨로지 기반 챗봇과 대화합니다. (트레이싱 포함)
 
     Args:
         query: 사용자 질문
+        user_id: 사용자 ID (선택사항)
+        session_id: 세션 ID (선택사항)
 
     Returns:
         답변 및 관련 정보
     """
-    result = await chat_service.generate_answer(query)
-    return result
+    # 새로운 라우터 시스템 사용 (트레이싱 포함)
+    from api.services.query_router import QueryRouter
+    from api.services.response_formatter import ResponseFormatter
+
+    router = QueryRouter(chat_service, ResponseFormatter())
+    result = await router.process_query(query, user_id, session_id)
+
+    # Convert numpy types to Python native types for JSON serialization
+    def convert_numpy_types(obj):
+        if isinstance(obj, dict):
+            return {key: convert_numpy_types(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_numpy_types(item) for item in obj]
+        elif isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return obj
+
+    return convert_numpy_types(result)
 
 
 @app.post("/report", response_model=ReportResponse)
@@ -144,6 +210,7 @@ async def create_report(
 # ========== 리포트 전용 고급 기능 API들 ==========
 
 @app.post("/report/comparative")
+@trace_llm("comparative_report")
 async def create_comparative_report(
     queries: list[str] = Body(...),
     domain: str = Body(None),
@@ -224,6 +291,16 @@ async def create_trend_report(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.on_event("startup")
+async def startup_event():
+    """앱 시작시 캐시 정리 작업 시작"""
+    await context_cache.start_cleanup_task()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """앱 종료시 캐시 정리 작업 중지"""
+    await context_cache.stop_cleanup_task()
+
 @app.post("/report/executive")
 async def create_executive_summary(
     req: ReportRequest, service: ReportService = Depends(get_report_service)
@@ -295,6 +372,7 @@ async def create_langgraph_report(
 
 
 @app.post("/report/langgraph/comparative")
+@trace_llm("langgraph_comparative_report")
 async def create_langgraph_comparative_report(
     queries: list[str] = Body(...),
     domain: str = Body(None),

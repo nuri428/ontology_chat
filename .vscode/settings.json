@@ -1,6 +1,29 @@
 {
-    "python-envs.defaultEnvManager": "ms-python.python:poetry",
-    "python-envs.defaultPackageManager": "ms-python.python:poetry",
-    "python-envs.pythonProjects": [],
-    "makefile.configureOnOpen": false
+  "claude.rules": {
+    "codeStyle": {
+      "preferKoreanComments": true,
+      "asyncFirst": true,
+      "explicitErrorHandling": true,
+      "noUnnecessaryWrappers": true
+    },
+    "performance": {
+      "requireCaching": true,
+      "instanceReuse": true,
+      "timeoutRequired": true,
+      "parallelProcessing": true
+    },
+    "quality": {
+      "maintainAGrade": true,
+      "minimumScore": 0.9,
+      "regressionTesting": true,
+      "performanceMonitoring": true
+    },
+    "architecture": {
+      "useExistingPackages": true,
+      "avoidWrappers": true,
+      "removeDuplication": true,
+      "simplicity": true
+    }
+  },
+  "makefile.configureOnOpen": false
 }

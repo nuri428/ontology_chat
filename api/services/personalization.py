@@ -206,8 +206,13 @@ class PersonalizationEngine:
         for query_type, patterns in self.query_patterns.items():
             score = 0
             for pattern in patterns:
-                matches = len(re.findall(pattern, query))
-                score += matches
+                try:
+                    matches = len(re.findall(pattern, query))
+                    score += matches
+                except re.error as e:
+                    # 정규식 패턴 오류 발생 시 무시하고 계속
+                    print(f"[WARNING] Invalid regex pattern '{pattern}': {e}")
+                    continue
             type_scores[query_type] = score
         
         # 가장 높은 점수의 타입 반환
@@ -225,8 +230,12 @@ class PersonalizationEngine:
         for intent, indicators in self.intent_indicators.items():
             score = 0
             for indicator in indicators:
-                matches = len(re.findall(indicator, query))
-                score += matches
+                try:
+                    matches = len(re.findall(indicator, query))
+                    score += matches
+                except re.error as e:
+                    print(f"[WARNING] Invalid regex indicator '{indicator}': {e}")
+                    continue
             intent_scores[intent] = score
         
         if intent_scores:
@@ -244,8 +253,12 @@ class PersonalizationEngine:
         """전문성 수준 추정"""
         for level, patterns in self.expertise_patterns.items():
             for pattern in patterns:
-                if re.search(pattern, query):
-                    return level
+                try:
+                    if re.search(pattern, query):
+                        return level
+                except re.error as e:
+                    print(f"[WARNING] Invalid regex pattern '{pattern}': {e}")
+                    continue
         
         # 기본값: 전문 용어 밀도로 판단
         technical_terms = [
@@ -275,12 +288,20 @@ class PersonalizationEngine:
         ]
         
         for pattern in urgent_patterns:
-            if re.search(pattern, query):
-                return "high"
-        
+            try:
+                if re.search(pattern, query):
+                    return "high"
+            except re.error as e:
+                print(f"[WARNING] Invalid regex pattern '{pattern}': {e}")
+                continue
+
         for pattern in medium_patterns:
-            if re.search(pattern, query):
-                return "medium"
+            try:
+                if re.search(pattern, query):
+                    return "medium"
+            except re.error as e:
+                print(f"[WARNING] Invalid regex pattern '{pattern}': {e}")
+                continue
         
         return "low"
     
@@ -296,31 +317,43 @@ class PersonalizationEngine:
         ]
         
         for pattern in time_patterns:
-            match = re.search(pattern, query)
-            if match:
-                hints.append(f"time:{match.group()}")
-        
+            try:
+                match = re.search(pattern, query)
+                if match:
+                    hints.append(f"time:{match.group()}")
+            except re.error as e:
+                print(f"[WARNING] Invalid regex pattern '{pattern}': {e}")
+                continue
+
         # 지역 힌트
         region_patterns = [
             r"한국|미국|중국|일본|유럽",
             r"국내|해외|글로벌|아시아"
         ]
-        
+
         for pattern in region_patterns:
-            match = re.search(pattern, query)
-            if match:
-                hints.append(f"region:{match.group()}")
-        
+            try:
+                match = re.search(pattern, query)
+                if match:
+                    hints.append(f"region:{match.group()}")
+            except re.error as e:
+                print(f"[WARNING] Invalid regex pattern '{pattern}': {e}")
+                continue
+
         # 산업 힌트
         industry_patterns = [
             r"ai|인공지능|기계학습|빅데이터",
             r"반도체|it|바이오|에너지|전기차|배터리"
         ]
-        
+
         for pattern in industry_patterns:
-            match = re.search(pattern, query)
-            if match:
-                hints.append(f"industry:{match.group()}")
+            try:
+                match = re.search(pattern, query)
+                if match:
+                    hints.append(f"industry:{match.group()}")
+            except re.error as e:
+                print(f"[WARNING] Invalid regex pattern '{pattern}': {e}")
+                continue
         
         return hints
     

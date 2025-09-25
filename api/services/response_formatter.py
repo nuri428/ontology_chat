@@ -56,15 +56,15 @@ class ResponseFormatter:
     ) -> str:
         """종합적인 답변 포맷팅 - 개인화 적용"""
         
-        # 개인화 분석
+        # 개인화 분석 비활성화 (성능 및 안정성 우선)
         response_style = None
-        if PERSONALIZATION_AVAILABLE:
-            try:
-                query_profile = analyze_user_query(query)
-                response_style = get_response_style(query_profile)
-                print(f"[DEBUG] 개인화 적용: {query_profile.query_type.value}, {query_profile.user_intent.value}")
-            except Exception as e:
-                print(f"[WARNING] 개인화 분석 실패: {e}")
+        # if PERSONALIZATION_AVAILABLE:
+        #     try:
+        #         query_profile = analyze_user_query(query)
+        #         response_style = get_response_style(query_profile)
+        #         print(f"[DEBUG] 개인화 적용: {query_profile.query_type.value}, {query_profile.user_intent.value}")
+        #     except Exception as e:
+        #         print(f"[WARNING] 개인화 분석 실패: {e}")
         
         sections = []
         
@@ -284,8 +284,8 @@ class ResponseFormatter:
                 content_lines.append(f"- **{company}**: 관련 사업 영역에서 활발한 활동")
             content_lines.append("")
         else:
-            # 쿼리 기반 동적 종목 추천
-            recommended_stocks = self._get_query_based_stock_recommendations(query)
+            # 단순화된 종목 추천 (동적 추천 비활성화)
+            recommended_stocks = self._get_fallback_stock_recommendations(query)
             content_lines.extend([
                 f"### 🏢 주요 {recommended_stocks['sector']} 종목",
                 *[f"- **{stock['name']}** ({stock['code']}): {stock['description']}" for stock in recommended_stocks['stocks'][:3]],
@@ -562,16 +562,23 @@ class ResponseFormatter:
             return self._get_fallback_stock_recommendations(query)
 
         try:
-            # 비동기 함수를 동기적으로 실행
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
+            # 현재 실행 중인 이벤트 루프가 있는지 확인
             try:
-                stocks = loop.run_until_complete(
-                    stock_data_service.search_stocks_by_query(query, limit=3)
-                )
-            finally:
-                loop.close()
+                loop = asyncio.get_running_loop()
+                # 이미 루프가 실행 중이면 폴백 사용
+                print("실시간 종목 추천 실패: Cannot run the event loop while another loop is running")
+                return self._get_fallback_stock_recommendations(query)
+            except RuntimeError:
+                # 실행 중인 루프가 없으면 새로운 루프 생성
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                try:
+                    stocks = loop.run_until_complete(
+                        stock_data_service.search_stocks_by_query(query, limit=3)
+                    )
+                finally:
+                    loop.close()
 
             if stocks:
                 # 첫 번째 종목의 섹터를 기준으로 섹터명 결정
@@ -612,6 +619,26 @@ class ResponseFormatter:
             ("반도체", "메모리"): ("반도체", [
                 {"name": "삼성전자", "code": "005930", "description": "메모리 반도체 글로벌 1위"},
                 {"name": "SK하이닉스", "code": "000660", "description": "메모리 반도체 2위"}
+            ]),
+            ("방산", "국방", "무기", "군수", "방위산업"): ("방산/국방", [
+                {"name": "한화시스템", "code": "272210", "description": "방산 전자장비, 해외수주 증가"},
+                {"name": "한화에어로스페이스", "code": "012450", "description": "항공엔진, 방산부품 전문"},
+                {"name": "LIG넥스원", "code": "079550", "description": "방산 전자 시스템, 레이더"}
+            ]),
+            ("SMR", "원전", "원자력"): ("원전/SMR", [
+                {"name": "한국전력", "code": "015760", "description": "전력 공급, 원전 운영"},
+                {"name": "한전KPS", "code": "051600", "description": "발전설비 유지보수, 원전 기술"},
+                {"name": "한국원자력연료", "code": "007340", "description": "핵연료 제조, SMR 기술 보유"}
+            ]),
+            ("2차전지", "이차전지", "배터리", "양극재"): ("2차전지/배터리", [
+                {"name": "에코프로", "code": "086520", "description": "양극재 선도업체, 전기차 배터리"},
+                {"name": "에코프로비엠", "code": "247540", "description": "배터리 양극재 전문, 글로벌 점유율"},
+                {"name": "포스코퓨처엠", "code": "003670", "description": "양극재, 음극재 통합 생산"}
+            ]),
+            ("금융", "지주회사", "은행"): ("금융지주", [
+                {"name": "KB금융", "code": "105560", "description": "국내 최대 금융지주, 디지털 혁신"},
+                {"name": "신한지주", "code": "055550", "description": "종합금융 서비스, 아시아 진출"},
+                {"name": "하나금융지주", "code": "086790", "description": "중소기업 금융 강점, 핀테크"}
             ])
         }
 

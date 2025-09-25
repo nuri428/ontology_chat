@@ -14,6 +14,17 @@ try:
 except ImportError:
     LANGCHAIN_AVAILABLE = False
 
+# Langfuse 트레이싱
+try:
+    from api.utils.langfuse_tracer import trace_llm
+    LANGFUSE_AVAILABLE = True
+except ImportError:
+    LANGFUSE_AVAILABLE = False
+    def trace_llm(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
 from api.logging import setup_logging
 logger = setup_logging()
 
@@ -102,11 +113,13 @@ class LLMKeywordExtractor:
 JSON만 응답하세요:"""
         )
 
+    @trace_llm("keyword_extraction_async")
     async def extract_keywords_async(self, query: str, domain_hints: List[str] = None) -> LLMKeywordResult:
         """비동기 키워드 추출"""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self.extract_keywords, query, domain_hints)
 
+    @trace_llm("keyword_extraction")
     def extract_keywords(self, query: str, domain_hints: List[str] = None) -> LLMKeywordResult:
         """동기 키워드 추출"""
         try:

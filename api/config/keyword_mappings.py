@@ -70,6 +70,83 @@ DOMAIN_KEYWORDS = {
             "글로벌": ["세계", "국제적", "전세계"]
         }
     },
+    "defense": {
+        "triggers": ["방산", "국방", "무기", "군수", "방위산업", "군사"],
+        "expansions": [
+            KeywordWeight("방산", 2.0, 1),
+            KeywordWeight("국방", 1.9, 1),
+            KeywordWeight("무기", 1.8, 1),
+            KeywordWeight("군수", 1.7, 1),
+            KeywordWeight("방위산업", 1.8, 1),
+            KeywordWeight("군사", 1.6, 2),
+            KeywordWeight("전투기", 1.5, 2),
+            KeywordWeight("레이더", 1.4, 2),
+            KeywordWeight("미사일", 1.5, 2),
+            KeywordWeight("함정", 1.4, 2),
+            KeywordWeight("해외수주", 1.7, 1),
+            KeywordWeight("수출계약", 1.6, 2),
+        ],
+        "synonyms": {
+            "방산": ["국방산업", "방위산업", "군수산업"],
+            "무기": ["무기체계", "방산장비", "군사장비"],
+            "해외수주": ["수출계약", "해외판매", "국외납품"]
+        }
+    },
+    "nuclear": {
+        "triggers": ["SMR", "원전", "원자력", "소형모듈원자로"],
+        "expansions": [
+            KeywordWeight("SMR", 2.0, 1),
+            KeywordWeight("원전", 1.9, 1),
+            KeywordWeight("원자력", 1.8, 1),
+            KeywordWeight("소형모듈원자로", 1.9, 1),
+            KeywordWeight("원전수출", 1.7, 1),
+            KeywordWeight("한국수력원자력", 1.6, 2),
+            KeywordWeight("원자력발전", 1.5, 2),
+        ],
+        "synonyms": {
+            "SMR": ["소형모듈원자로", "소형원전", "모듈형원자로"],
+            "원전": ["원자력발전소", "핵발전소", "원자력발전"],
+            "원자력": ["핵에너지", "원자력에너지"]
+        }
+    },
+    "battery": {
+        "triggers": ["2차전지", "이차전지", "배터리", "양극재", "음극재"],
+        "expansions": [
+            KeywordWeight("2차전지", 2.0, 1),
+            KeywordWeight("이차전지", 2.0, 1),
+            KeywordWeight("배터리", 1.9, 1),
+            KeywordWeight("리튬이온", 1.8, 1),
+            KeywordWeight("양극재", 1.8, 1),
+            KeywordWeight("음극재", 1.7, 1),
+            KeywordWeight("전해질", 1.6, 2),
+            KeywordWeight("분리막", 1.6, 2),
+            KeywordWeight("전기차", 1.7, 1),
+            KeywordWeight("ESS", 1.5, 2),
+        ],
+        "synonyms": {
+            "2차전지": ["이차전지", "배터리", "충전지"],
+            "양극재": ["캐소드", "정극재"],
+            "음극재": ["애노드", "부극재"]
+        }
+    },
+    "finance": {
+        "triggers": ["금융", "지주회사", "은행", "증권", "보험"],
+        "expansions": [
+            KeywordWeight("금융", 1.9, 1),
+            KeywordWeight("지주회사", 1.8, 1),
+            KeywordWeight("은행", 1.8, 1),
+            KeywordWeight("증권", 1.7, 1),
+            KeywordWeight("보험", 1.7, 1),
+            KeywordWeight("카드", 1.6, 2),
+            KeywordWeight("핀테크", 1.7, 1),
+            KeywordWeight("금융지주", 1.8, 1),
+        ],
+        "synonyms": {
+            "금융지주": ["지주회사", "금융그룹", "지주"],
+            "은행": ["뱅킹", "은행업"],
+            "증권": ["브로커리지", "투자은행"]
+        }
+    },
     "stock": {
         "triggers": ["종목", "주식", "투자", "증권"],
         "expansions": [
@@ -134,6 +211,46 @@ INDUSTRY_KEYWORDS = {
         KeywordWeight("풍력", 1.6, 2),
         KeywordWeight("배터리", 1.8, 1),
         KeywordWeight("전기차", 1.7, 1),
+    ],
+    "defense": [
+        KeywordWeight("방산", 2.0, 1),
+        KeywordWeight("국방", 1.9, 1),
+        KeywordWeight("무기체계", 1.8, 1),
+        KeywordWeight("군수", 1.7, 1),
+        KeywordWeight("방위산업", 1.8, 1),
+        KeywordWeight("수출계약", 1.6, 2),
+        KeywordWeight("해외수주", 1.7, 1),
+    ],
+    "nuclear": [
+        KeywordWeight("SMR", 2.0, 1),
+        KeywordWeight("원전", 1.9, 1),
+        KeywordWeight("원자력", 1.8, 1),
+        KeywordWeight("소형모듈원자로", 1.9, 1),
+        KeywordWeight("원전수출", 1.7, 1),
+        KeywordWeight("원자력발전", 1.6, 2),
+        KeywordWeight("핵연료", 1.5, 2),
+    ],
+    "battery": [
+        KeywordWeight("2차전지", 2.0, 1),
+        KeywordWeight("이차전지", 2.0, 1),
+        KeywordWeight("배터리", 1.9, 1),
+        KeywordWeight("리튬이온", 1.8, 1),
+        KeywordWeight("양극재", 1.8, 1),
+        KeywordWeight("음극재", 1.7, 1),
+        KeywordWeight("전해질", 1.6, 2),
+        KeywordWeight("분리막", 1.6, 2),
+        KeywordWeight("전기차배터리", 1.7, 1),
+        KeywordWeight("ESS", 1.5, 2),
+    ],
+    "finance": [
+        KeywordWeight("금융", 1.9, 1),
+        KeywordWeight("지주회사", 1.8, 1),
+        KeywordWeight("은행", 1.8, 1),
+        KeywordWeight("증권", 1.7, 1),
+        KeywordWeight("보험", 1.7, 1),
+        KeywordWeight("카드", 1.6, 2),
+        KeywordWeight("핀테크", 1.7, 1),
+        KeywordWeight("디지털금융", 1.6, 2),
     ],
     "semiconductor": [
         KeywordWeight("반도체", 2.0, 1),
@@ -237,9 +354,11 @@ REGION_KEYWORDS = {
 
 # 불용어 (검색에서 제외할 단어들)
 STOPWORDS = {
-    "은", "는", "이", "가", "을", "를", "의", "에", "에서", "로", "으로", 
+    "은", "는", "이", "가", "을", "를", "의", "에", "에서", "로", "으로",
     "관련", "대한", "있는", "없는", "같은", "다른", "그런", "이런", "저런",
-    "하는", "되는", "있다", "없다", "이다", "아니다", "그것", "이것", "저것"
+    "하는", "되는", "있다", "없다", "이다", "아니다", "그것", "이것", "저것",
+    "보여줘", "알려줘", "말해줘", "해줘", "주세요", "줘", "해봐", "해보세요",
+    "뉴스", "기사", "정보", "내용", "자료", "데이터", "현황", "상황"
 }
 
 def get_all_keyword_mappings() -> Dict:

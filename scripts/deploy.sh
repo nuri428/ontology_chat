@@ -1,90 +1,128 @@
 #!/bin/bash
 
-# 운영 환경 배포 스크립트
-set -e
+# Production deployment script for Ontology Chat
+# Usage: ./scripts/deploy.sh [deploy|stop|restart|logs|status|clean]
 
-# 색상 정의
+set -euo pipefail
+
+# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# 로그 함수
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+# Configuration
+PROJECT_NAME="ontology-chat"
+COMPOSE_FILE="docker-compose.prod.yml"
+ENV_FILE=".env.prod"
+BACKUP_DIR="./backups"
+LOG_DIR="./logs/production"
+
+# Ensure required directories exist
+mkdir -p "$BACKUP_DIR" "$LOG_DIR"
+
+# Logging function
+log() {
+    echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
 }
 
-log_success() {
+error() {
+    echo -e "${RED}[ERROR]${NC} $1" >&2
+}
+
+success() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
-log_warning() {
+warn() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+# Health check function
+health_check() {
+    local service=$1
+    local url=$2
+    local timeout=${3:-30}
+
+    log "Health checking $service..."
+
+    for i in $(seq 1 $timeout); do
+        if curl -f -s "$url" > /dev/null 2>&1; then
+            success "$service is healthy"
+            return 0
+        fi
+
+        if [ $i -eq $timeout ]; then
+            error "$service failed health check after ${timeout}s"
+            return 1
+        fi
+
+        echo -n "."
+        sleep 1
+    done
 }
 
-# 환경 변수 확인
-check_env() {
-    log_info "환경 변수 확인 중..."
-    
-    if [ ! -f ".env.prod" ]; then
-        log_error ".env.prod 파일이 없습니다. .env.prod.example을 참조하여 생성하세요."
-        exit 1
-    fi
-    
-    # 필수 환경 변수 확인
-    source .env.prod
-    
-    if [ -z "$OPENAI_API_KEY" ]; then
-        log_error "OPENAI_API_KEY가 설정되지 않았습니다."
-        exit 1
-    fi
-    
-    if [ -z "$NEO4J_PASSWORD" ]; then
-        log_error "NEO4J_PASSWORD가 설정되지 않았습니다."
-        exit 1
-    fi
-    
-    if [ -z "$OPENSEARCH_PASSWORD" ]; then
-        log_error "OPENSEARCH_PASSWORD가 설정되지 않았습니다."
-        exit 1
-    fi
-    
-    log_success "환경 변수 확인 완료"
-}
+# Backup function
+backup_data() {
+    log "Creating backup..."
 
-# SSL 인증서 확인
-check_ssl() {
-    log_info "SSL 인증서 확인 중..."
-    
-    if [ ! -f "nginx/ssl/cert.pem" ] || [ ! -f "nginx/ssl/key.pem" ]; then
-        log_warning "SSL 인증서가 없습니다. 자체 서명된 인증서를 생성합니다..."
-        
-        mkdir -p nginx/ssl
-        
-        # 자체 서명된 인증서 생성
-        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout nginx/ssl/key.pem \
-            -out nginx/ssl/cert.pem \
-            -subj "/C=KR/ST=Seoul/L=Seoul/O=OntologyChat/CN=localhost"
-        
-        log_success "자체 서명된 SSL 인증서 생성 완료"
+    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local backup_file="${BACKUP_DIR}/backup_${timestamp}.tar.gz"
+
+    # Backup volumes
+    docker run --rm \
+        -v "${PROJECT_NAME}_neo4j_data:/backup/neo4j" \
+        -v "${PROJECT_NAME}_opensearch_data:/backup/opensearch" \
+        -v "${PROJECT_NAME}_ollama_models:/backup/ollama" \
+        -v "$(pwd)/${BACKUP_DIR}:/output" \
+        alpine:latest \
+        tar czf "/output/backup_${timestamp}.tar.gz" -C /backup .
+
+    if [ -f "$backup_file" ]; then
+        success "Backup created: $backup_file"
+
+        # Keep only last 7 backups
+        find "$BACKUP_DIR" -name "backup_*.tar.gz" -type f | sort | head -n -7 | xargs rm -f
     else
-        log_success "SSL 인증서 확인 완료"
+        error "Backup failed"
+        return 1
     fi
 }
 
-# Docker 이미지 빌드
-build_images() {
-    log_info "Docker 이미지 빌드 중..."
-    
-    docker-compose -f docker-compose.prod.yml build --no-cache
-    
-    log_success "Docker 이미지 빌드 완료"
+# Pre-deployment checks
+pre_deploy_checks() {
+    log "Running pre-deployment checks..."
+
+    # Check if required files exist
+    if [ ! -f "$COMPOSE_FILE" ]; then
+        error "Compose file $COMPOSE_FILE not found"
+        return 1
+    fi
+
+    if [ ! -f "$ENV_FILE" ]; then
+        error "Environment file $ENV_FILE not found"
+        return 1
+    fi
+
+    # Check Docker
+    if ! docker --version > /dev/null 2>&1; then
+        error "Docker not installed or not running"
+        return 1
+    fi
+
+    if ! docker-compose --version > /dev/null 2>&1; then
+        error "Docker Compose not installed"
+        return 1
+    fi
+
+    # Check available disk space (minimum 5GB)
+    local available=$(df / | awk 'NR==2 {print $4}')
+    if [ "$available" -lt 5242880 ]; then  # 5GB in KB
+        warn "Low disk space: $(($available / 1024))MB available"
+    fi
+
+    success "Pre-deployment checks passed"
 }
 
 # 서비스 시작
