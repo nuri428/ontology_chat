@@ -34,9 +34,9 @@ class IntentClassifier:
         # 강화된 의도별 패턴 정의
         self.intent_patterns = {
             QueryIntent.NEWS_INQUIRY: {
-                "keywords": ["뉴스", "소식", "기사", "보도", "발표", "공시", "출시", "런칭", "공개"],
+                "keywords": ["뉴스", "소식", "기사", "보도", "발표", "공시", "출시", "런칭", "공개", "사업", "현황", "동향", "추세", "이슈", "시장", "기업", "경쟁력", "기술"],
                 "verbs": ["보여줘", "알려줘", "말해줘", "찾아줘", "검색해줘"],
-                "context_words": ["관련", "최근", "오늘", "어제", "이번주", "발표된", "나온"],
+                "context_words": ["관련", "최근", "오늘", "어제", "이번주", "발표된", "나온", "대한", "에서", "시장에서", "분야에서"],
                 "patterns": [
                     r".*뉴스.*보여줘",
                     r".*소식.*알려줘",
@@ -46,7 +46,15 @@ class IntentClassifier:
                     r".*발표.*뉴스",
                     r".*에.*대한.*뉴스",
                     r".*관련.*최근",
-                    r".*영향을.*줄.*뉴스"
+                    r".*영향을.*줄.*뉴스",
+                    r".*사업.*현황",
+                    r".*사업.*은",
+                    r".*동향.*은",
+                    r".*[은는].*어때",  # "~는 어때?" 패턴
+                    r".*[이가].*어떻게",  # "~가 어떻게?" 패턴
+                    r".*시장에서.*기업",  # "시장에서 기업은?" 패턴
+                    r".*기업.*[은는]",  # "기업은/는?" 패턴
+                    r".*경쟁력.*기업"  # "경쟁력 있는 기업?" 패턴
                 ],
                 "weight": 1.2
             },
@@ -103,9 +111,11 @@ class IntentClassifier:
                 r"(자동차|전기차|수소차|자율주행)",
             ],
             "product": [
-                # 제품명 패턴 추가
-                r"(아이온2|아이온|리니지|갤럭시|아이폰)",
-                r"([가-힣A-Za-z0-9]+\s*[1-9]+)",  # 제품명+숫자 패턴
+                # 제품명 패턴 (구체적으로 명시)
+                r"(아이온2|아이온|리니지|갤럭시\s*\w+|아이폰\s*\d+|갤럭시S\d+|갤럭시Z\d+)",
+                r"(그랜저|소나타|아반떼|카니발|스타리아)",  # 자동차
+                r"(HBM2|HBM3|DDR5|DDR4|GDDR6)",  # 반도체 제품
+                # 시간 표현과 혼동되지 않도록 제품명 패턴 제거 (너무 광범위함)
             ],
             "stock_code": [
                 r"(\d{6})"
@@ -233,17 +243,23 @@ class IntentClassifier:
         return keywords
 
     def _extract_news_context(self, query: str) -> List[str]:
-        """뉴스 맥락 키워드 추출"""
-        context_patterns = [
-            r"(영향을?\s*줄\s*만한|영향)",
-            r"(관련|대한|관해서)",
-            r"(발표|공시|보도|기사)"
+        """뉴스 맥락 키워드 추출 (개선)"""
+        context_keywords = []
+
+        # 핵심 명사 추출 (숫자/조사 제외)
+        # 중요: 비캡처 그룹 (?:...) 사용하여 튜플 반환 방지
+        patterns = [
+            r"(?:2차전지|배터리|HBM|AI|반도체|전기차|원전|SMR|방산|바이오|신약)",
+            r"(?:수주|현황|실적|매출|영업이익|분석|전망|영향|대응|전략|변화|추세)",
+            r"(?:기업|회사|종목|주식|투자|시장|산업|섹터)",
+            r"(?:삼성전자|SK하이닉스|현대차|LG에너지솔루션|포스코|네이버|카카오)"
         ]
-        keywords = []
-        for pattern in context_patterns:
+
+        for pattern in patterns:
             matches = re.findall(pattern, query, re.IGNORECASE)
-            keywords.extend(matches)
-        return keywords
+            context_keywords.extend(matches)
+
+        return list(set(context_keywords))  # 중복 제거
 
     def _extract_investment_keywords(self, query: str) -> List[str]:
         """투자 관련 키워드 추출"""
@@ -272,14 +288,39 @@ class IntentClassifier:
         return keywords
 
     def _extract_basic_keywords(self, query: str) -> List[str]:
-        """기본 키워드 추출"""
-        # 간단한 토큰화
+        """개선된 기본 키워드 추출"""
         import re
-        tokens = re.findall(r'[가-힣A-Za-z0-9]+', query)
-        # 불용어 제거
-        stopwords = {'은', '는', '이', '가', '을', '를', '의', '에', '로', '과', '와', '도', '만', '까지', '부터'}
-        keywords = [token for token in tokens if token not in stopwords and len(token) > 1]
-        return keywords
+
+        # 확장된 불용어 리스트
+        stopwords = {
+            '은', '는', '이', '가', '을', '를', '의', '에', '로', '과', '와', '도', '만', '까지', '부터',
+            '최근', '개월', '개월간', '주요', '들의', '현황은', '어디인가', '어떤', '어때',
+            '해줘', '알려줘', '보여줘', '찾아줘', '무엇', '뭐야', '인가', '있나', '하는'
+        }
+
+        # 핵심 명사 패턴 (산업/기술/경영 용어)
+        # 비캡처 그룹 사용하여 튜플 반환 방지
+        important_patterns = [
+            r"(?:2차전지|배터리|HBM|AI|반도체|전기차|원전|SMR|방산|바이오|신약)",
+            r"(?:수주|실적|매출|영업이익|수익률|주가|투자|분석|전망|영향|현황)",
+            r"(?:기업|회사|종목|산업|시장|테마|섹터)",
+            r"(?:기술|경쟁력|국산화|장비|소재|부품)",
+            r"(?:정책|변화|이슈|화재|추진|확대|축소)",
+            r"(?:삼성전자|SK하이닉스|현대차|LG|포스코|네이버|카카오)",
+        ]
+
+        keywords = []
+        for pattern in important_patterns:
+            matches = re.findall(pattern, query, re.IGNORECASE)
+            keywords.extend(matches)
+
+        # 패턴에 없는 경우 기본 토큰화
+        if not keywords:
+            tokens = re.findall(r'[가-힣A-Za-z0-9]+', query)
+            keywords = [token for token in tokens
+                       if token not in stopwords and len(token) > 1]
+
+        return list(set(keywords))  # 중복 제거
 
     def _generate_reasoning(self, query: str, intent: QueryIntent,
                           confidence: float, entities: Dict) -> str:

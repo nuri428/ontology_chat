@@ -7,8 +7,15 @@ import os
 import asyncio
 import functools
 from typing import Optional, Dict, Any, Callable, Awaitable
-from langfuse import Langfuse
 import logging
+
+# Langfuse 선택적 임포트
+try:
+    from langfuse import Langfuse
+    LANGFUSE_AVAILABLE = True
+except ImportError:
+    Langfuse = None
+    LANGFUSE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +29,12 @@ class LangfuseTracer:
 
     def _initialize(self):
         """Langfuse 초기화"""
+        if not LANGFUSE_AVAILABLE:
+            logger.info("[Langfuse] 모듈이 설치되지 않음 - 트레이싱 비활성화")
+            self.is_enabled = False
+            self.langfuse = None
+            return
+
         try:
             from api.config import settings
 
@@ -30,7 +43,7 @@ class LangfuseTracer:
             public_key = settings.langfuse_public_key or os.getenv("LANGFUSE_PUBLIC_KEY")
             host = settings.langfuse_host or os.getenv("LANGFUSE_HOST")
 
-            if secret_key and public_key and host:
+            if secret_key and public_key and host and Langfuse is not None:
                 self.langfuse = Langfuse(
                     secret_key=secret_key,
                     public_key=public_key,
@@ -39,11 +52,14 @@ class LangfuseTracer:
                 self.is_enabled = True
                 logger.info("[Langfuse] 트레이싱 초기화 완료")
             else:
-                logger.warning("[Langfuse] 설정 누락으로 트레이싱 비활성화")
+                logger.warning("[Langfuse] 설정 누락 또는 모듈 없음 - 트레이싱 비활성화")
+                self.is_enabled = False
+                self.langfuse = None
 
         except Exception as e:
             logger.error(f"[Langfuse] 초기화 실패: {e}")
             self.is_enabled = False
+            self.langfuse = None
 
     def trace_llm_call(
         self,
@@ -54,9 +70,8 @@ class LangfuseTracer:
     ):
         """LLM 호출 트레이싱 데코레이터"""
         def decorator(func: Callable):
-            if not self.is_enabled:
-                return func
-
+            # 데코레이터 정의 시점이 아닌, 함수 호출 시점에 is_enabled를 체크
+            # 따라서 여기서는 항상 wrapper를 반환
             if asyncio.iscoroutinefunction(func):
                 @functools.wraps(func)
                 async def async_wrapper(*args, **kwargs):
@@ -85,7 +100,7 @@ class LangfuseTracer:
         **kwargs
     ):
         """비동기 LLM 호출 트레이싱"""
-        if not self.is_enabled:
+        if not self.is_enabled or self.langfuse is None:
             return await func(*args, **kwargs)
 
         # 트레이스 시작
@@ -136,7 +151,7 @@ class LangfuseTracer:
         **kwargs
     ):
         """동기 LLM 호출 트레이싱"""
-        if not self.is_enabled:
+        if not self.is_enabled or self.langfuse is None:
             return func(*args, **kwargs)
 
         # 트레이스 시작

@@ -14,6 +14,7 @@ class NewsQueryHandler:
 
     def __init__(self, chat_service):
         self.chat_service = chat_service
+        self._last_graph_rows = []  # 마지막 검색의 그래프 결과 저장
 
     async def handle_news_query(self, query: str, intent_result: IntentResult, tracker=None) -> Dict[str, Any]:
         """뉴스 질의 처리"""
@@ -24,15 +25,20 @@ class NewsQueryHandler:
         if not keywords:
             keywords = [query]
 
-        # 뉴스 검색 수행
+        # 뉴스 검색 수행 (graph_rows도 함께 가져옴)
         news_hits = await self._search_news(keywords)
+        graph_rows = self._last_graph_rows  # _search_news에서 저장한 그래프 결과
+
+        print(f"[뉴스 조회] 그래프 결과: {len(graph_rows)}건")
+        logger.info(f"[뉴스 조회] 그래프 결과 사용: {len(graph_rows)}건")
 
         # 개선된 컨텍스트 기반 응답 생성
         from api.services.context_answer_generator import generate_context_answer
 
         # 검색 결과를 통합 형태로 변환
         search_results = {
-            "sources": []
+            "sources": [],
+            "graph_samples": graph_rows[:5]  # 상위 5개 그래프 샘플 포함
         }
 
         # 뉴스 검색 결과를 sources 형태로 변환 (디버깅 강화)
@@ -122,7 +128,8 @@ class NewsQueryHandler:
             "meta": {
                 "query": query,
                 "search_type": "context_enhanced",
-                "total_hits": len(news_hits)
+                "total_hits": len(news_hits),
+                "graph_samples_shown": len(graph_rows)  # 그래프 샘플 수 포함
             }
         }
 
@@ -133,23 +140,39 @@ class NewsQueryHandler:
         """뉴스 검색 (중복 제거 및 최신순)"""
         try:
             # 키워드 정제: 뉴스 검색에 특화된 필터링
+            print(f"[뉴스 검색] 입력 키워드: {keywords}")
             refined_keywords = self._refine_news_keywords(keywords)
+            print(f"[뉴스 검색] 정제된 키워드: {refined_keywords}")
 
             if not refined_keywords:
                 logger.warning("뉴스 검색용 키워드가 없습니다")
                 return []
 
             # 뉴스 전용 최적화된 검색 수행
-            search_query = " ".join(refined_keywords[:3])  # 상위 3개 키워드만 사용
+            # 핵심 키워드 우선 + 부가 키워드는 선택적으로
+            # 예: "2차전지 수주 기업" 보다는 "2차전지" 위주로 검색하되 "수주"를 포함한 결과 우선
+            primary_keywords = [kw for kw in refined_keywords if len(kw) > 2][:2]  # 핵심 키워드 최대 2개
+            search_query = " ".join(primary_keywords) if primary_keywords else " ".join(refined_keywords[:2])
+            print(f"[뉴스 검색] 검색어: '{search_query}' (원본: {refined_keywords})")
             logger.info(f"[뉴스 검색] 검색어: '{search_query}'")
 
-            # 최적화: 복잡한 온톨로지 검색 대신 직접 뉴스 검색 사용
-            hits, _, _ = await self._fast_news_search(search_query, size=25)
+            # Neo4j 그래프 검색 포함 (search_parallel 사용)
+            print(f"[뉴스 검색] search_parallel 호출 시작")
+            logger.info(f"[뉴스 검색] search_parallel 호출 (Neo4j 그래프 + OpenSearch)")
+            news_hits, graph_rows, _, search_time, graph_time, news_time = await self.chat_service.search_parallel(
+                search_query,
+                size=25
+            )
 
-            # 폴백: 고속 검색이 실패하면 기존 검색 사용
-            if not hits:
-                logger.info(f"[뉴스 검색] 고속 검색 실패, 기존 검색으로 폴백")
-                hits, _, _ = await self.chat_service._search_news_simple_hybrid(search_query, size=25)
+            print(f"[뉴스 검색] search_parallel 완료: 뉴스 {len(news_hits)}건, 그래프 {len(graph_rows)}건")
+            logger.info(f"[뉴스 검색] 결과: 뉴스 {len(news_hits)}건, 그래프 {len(graph_rows)}건")
+            logger.info(f"[뉴스 검색] 시간: 검색 {search_time:.0f}ms, 그래프 {graph_time:.0f}ms, 뉴스 {news_time:.0f}ms")
+
+            # search_parallel 결과를 기존 형식으로 변환
+            hits = news_hits
+
+            # graph_rows를 저장하여 반환 (중요!)
+            self._last_graph_rows = graph_rows
 
             # 중복 제거 (URL 기준) - 직접 필드 사용
             seen_urls = set()
@@ -313,24 +336,37 @@ class NewsQueryHandler:
         from api.config.keyword_mappings import STOPWORDS
 
         # 확장된 stopwords (뉴스 검색 특화)
+        # 주의: '현황', '수주', '실적' 같은 비즈니스 용어는 제거하지 않음!
         news_stopwords = STOPWORDS | {
-            '뉴스', '기사', '소식', '정보', '내용', '자료', '현황', '상황',
+            '뉴스', '기사', '소식', '정보', '내용', '자료',
             '보여줘', '알려줘', '말해줘', '해줘', '찾아줘', '검색해줘',
             '관련', '대한', '관해서', '에서', '으로', '로서', '에게',
             '는', '은', '이', '가', '을', '를', '의', '에', '로', '으로',
             '있는', '없는', '같은', '다른', '그런', '이런',
             '주요', '최근', '오늘', '어제', '요즘',
-            '좀', '더', '많이', '잘', '빨리'
+            '좀', '더', '많이', '잘', '빨리',
+            '개월', '개월간', '들의', '인가', '어디'
         }
 
         refined = []
         for keyword in keywords:
+            # 튜플이나 리스트가 들어온 경우 처리 (방어 코드)
+            if isinstance(keyword, (tuple, list)):
+                # 튜플/리스트 내부의 문자열만 추출
+                keyword = ''.join([k for k in keyword if isinstance(k, str) and k])
+
+            # 문자열이 아니면 건너뛰기
+            if not isinstance(keyword, str):
+                continue
+
             if keyword and len(keyword) > 1:
                 # stopwords 필터링
                 if keyword.lower() not in news_stopwords:
-                    # 너무 짧거나 숫자만 있는 키워드 제외
-                    if len(keyword) >= 2 and not keyword.isdigit():
-                        refined.append(keyword)
+                    # 숫자만 있는 키워드 제외 (1자리든 2자리든 모두)
+                    if not keyword.isdigit():
+                        # 너무 짧은 키워드 제외 (단, 2글자 이상 한글/영문은 허용)
+                        if len(keyword) >= 2 or (len(keyword) == 1 and keyword.isalpha()):
+                            refined.append(keyword)
 
         return refined[:5]  # 최대 5개 키워드만 사용
 

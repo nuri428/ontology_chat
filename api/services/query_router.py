@@ -162,15 +162,23 @@ class QueryRouter:
 
             # 결과 형태 통일
             if isinstance(result, dict) and "answer" in result:
+                # meta 정보 병합 (graph_samples_shown 등 포함)
+                result_meta = result.get("meta", {})
+                combined_meta = {
+                    "query": query,
+                    "analysis_type": "fallback",
+                    "fallback_reason": "intent_classification_failed",
+                    "graph_samples_shown": result_meta.get("graph_samples_shown", 0),
+                    "total_latency_ms": result_meta.get("total_latency_ms", 0),
+                    **result_meta  # 기존 meta 정보도 포함
+                }
+
                 return {
                     "type": "fallback",
                     "markdown": result["answer"],
                     "sources": result.get("sources", []),
-                    "meta": {
-                        "query": query,
-                        "analysis_type": "fallback",
-                        "fallback_reason": "intent_classification_failed"
-                    }
+                    "graph_samples": result.get("graph_samples", []),  # 그래프 샘플 추가
+                    "meta": combined_meta
                 }
             else:
                 return {
