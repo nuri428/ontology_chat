@@ -55,6 +55,15 @@ pytest tests/experimental/ -v
 
 # Quick tests (exclude slow)
 pytest -m "not slow"
+
+# Neo4j specific tests
+docker exec ontology-chat-api-dev uv run python tests/integration/test_neo4j_samsung.py
+docker exec ontology-chat-api-dev uv run python tests/integration/test_neo4j_direct.py
+
+# Shell script tests
+./tests/integration/test_various_queries.sh
+./tests/integration/test_final.sh
+./tests/integration/test_cache_api.sh
 ```
 
 ### Run with Coverage
@@ -85,6 +94,17 @@ pytest --cov=api --cov-report=html
 - **Purpose**: Test API endpoints and service interactions
 - **Focus**: HTTP endpoints, database connections
 - **Requirements**: May need services running
+
+#### Integration Test Files
+- `test_neo4j_samsung.py`: Neo4j 삼성전자 검색 직접 테스트
+- `test_neo4j_direct.py`: Neo4j 쿼리 성능 직접 테스트
+- `test_comprehensive_queries.py`: 종합 질의 품질 테스트
+- `test_simple_chat.py`: 간단한 채팅 API 테스트
+- `test_various_queries.sh`: 다양한 질의 통합 테스트 (Shell 스크립트)
+- `test_final.sh`: 최종 통합 테스트 (Shell 스크립트)
+- `test_cache_api.sh`: 캐시 API 테스트 (Shell 스크립트)
+- `create_neo4j_indexes.cypher`: Neo4j 인덱스 생성 스크립트
+- `reports/`: 테스트 결과 리포트 저장 디렉토리
 
 ### Performance Tests
 - **Location**: `tests/performance/`

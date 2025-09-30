@@ -18,3 +18,10 @@ coverage.xml
 dist/
 node_modules/*
 
+# Test outputs and reports
+tests/integration/reports/*.json
+tests/integration/reports/debug_*.json
+test_report_*.json
+htmlcov/
+.coverage
+

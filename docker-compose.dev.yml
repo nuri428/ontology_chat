@@ -33,7 +33,9 @@ services:
       # 기타 설정
       - NEO4J_SEARCH_LOOKBACK_DAYS=${NEO4J_SEARCH_LOOKBACK_DAYS:-180}
       - NEO4J_SEARCH_DEFAULT_DOMAIN=${NEO4J_SEARCH_DEFAULT_DOMAIN:-}
-      - NEO4J_SEARCH_CYPHER_FILE=${NEO4J_SEARCH_CYPHER_FILE:-api/config/graph_search.cypher}
+      # Disabled custom Cypher file to use optimized generated query with TEXT indexes
+      # - NEO4J_SEARCH_CYPHER_FILE=${NEO4J_SEARCH_CYPHER_FILE:-api/config/graph_search.cypher}
+      - NEO4J_SEARCH_CYPHER_FILE=${NEO4J_SEARCH_CYPHER_FILE:-}
       - GRAPH_SEARCH_KEYS=${GRAPH_SEARCH_KEYS:-}
       - OLLAMA_HOST=${OLLAMA_HOST:-http://192.168.0.11:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:8b-q8_0}

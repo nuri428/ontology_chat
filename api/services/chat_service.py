@@ -33,10 +33,13 @@ except ImportError as e:
 
 # Langfuse 트레이싱
 try:
-    from api.utils.langfuse_tracer import tracer, trace_llm, trace_analysis
+    from api.utils.langfuse_tracer import tracer, trace_llm, trace_analysis, LANGFUSE_AVAILABLE as TRACER_AVAILABLE
+    # Langfuse가 실제로 사용 가능한지 확인
+    if not TRACER_AVAILABLE or not tracer or not tracer.is_enabled:
+        raise ImportError("Langfuse tracer not available or not enabled")
     LANGFUSE_AVAILABLE = True
-except ImportError as e:
-    print(f"[WARNING] Langfuse 트레이서 임포트 실패: {e}")
+except (ImportError, AttributeError) as e:
+    print(f"[WARNING] Langfuse 트레이서 사용 불가: {e}")
     LANGFUSE_AVAILABLE = False
     tracer = None
 
@@ -481,28 +484,32 @@ class ChatService:
 
         async def search_graph():
             # 서킷 브레이커 확인
+            print(f"[DEBUG] Neo4j 서킷 브레이커 상태: {self.neo4j_circuit_breaker.state}, is_open={self.neo4j_circuit_breaker.is_open()}")
             if self.neo4j_circuit_breaker.is_open():
                 print("[DEBUG] Neo4j 서킷 브레이커 OPEN, 건너뜀")
                 return ([], 0.0, None)
 
             try:
+                print(f"[DEBUG] Neo4j 쿼리 시작 (timeout=3.0s)")
                 result = await asyncio.wait_for(
-                    self._query_graph(query, limit=3),  # 결과 수 줄여서 속도 향상
-                    timeout=0.3  # 0.3초 타임아웃 (극도로 빠르게)
+                    self._query_graph(query, limit=5),  # 결과 수 5개
+                    timeout=3.0  # 3초 타임아웃 (Neo4j 쿼리 성능 고려)
                 )
+                print(f"[DEBUG] Neo4j 쿼리 성공: {len(result[0])}개 결과, {result[1]:.2f}ms")
                 self.neo4j_circuit_breaker.record_success()
                 return result
             except (asyncio.TimeoutError, Exception) as e:
-                print(f"[DEBUG] Neo4j 오류: {e}, 빠른 응답을 위해 생략")
+                print(f"[DEBUG] Neo4j 오류: {type(e).__name__}: {e}, 빠른 응답을 위해 생략")
                 self.neo4j_circuit_breaker.record_failure()
+                print(f"[DEBUG] 서킷 브레이커 실패 기록: {self.neo4j_circuit_breaker.failure_count}/{self.neo4j_circuit_breaker.failure_threshold}, 상태={self.neo4j_circuit_breaker.state}")
                 return ([], 0.0, None)  # 폴백
 
         async def search_news():
             try:
-                # A급 달성을 위해 단순한 검색 함수 직접 사용 (타임아웃 이슈 해결)
+                # 기본 검색 사용 (온톨로지 확장은 선택적으로 활성화 가능)
                 news_hits, search_time, search_error = await asyncio.wait_for(
                     self._search_news(query, size=size),
-                    timeout=1.0  # 1초 타임아웃 (더 빠르게)
+                    timeout=1.0  # 1초 타임아웃
                 )
 
                 # A급 달성을 위한 고성능 키워드 매칭 점수 (Qwen Reranker 비교용)
@@ -558,9 +565,13 @@ class ChatService:
         keyword_time = total_time * 0.25  # 추정
         news_time = total_time * 0.75     # 추정
 
+        # 디버깅: 결과 확인
+        graph_rows_out = graph_results[0] if isinstance(graph_results, tuple) else []
+        print(f"[DEBUG] search_parallel 반환: graph_rows={len(graph_rows_out)}개, news={len(news_results[0]) if isinstance(news_results, tuple) else 0}개")
+
         return (
             news_results[0] if isinstance(news_results, tuple) else [],  # news hits
-            graph_results[0] if isinstance(graph_results, tuple) else [],  # graph rows
+            graph_rows_out,  # graph rows
             keywords,  # extracted keywords
             keyword_time,  # keyword extraction time (추정)
             news_time,  # news search time (추정)
@@ -1163,31 +1174,54 @@ class ChatService:
             return [], (time.perf_counter() - t0) * 1000.0, str(e)
 
     async def _get_ontology_expansion(self, keywords: List[str]) -> List[str]:
-        """온톨로지 그래프에서 관련 엔티티 확장"""
+        """온톨로지 그래프에서 관련 엔티티 확장 (최적화 버전)"""
+        import asyncio
+
         try:
             expansion_entities = []
 
-            for keyword in keywords[:3]:  # 상위 3개 키워드만 처리
-                # 그래프에서 관련 엔티티 검색
-                graph_rows, _ = await self._graph(keyword)
+            # 병렬 처리로 속도 향상
+            async def expand_keyword(keyword: str) -> List[str]:
+                try:
+                    # _query_graph 사용 (캐시 활용)
+                    graph_rows, _, _ = await asyncio.wait_for(
+                        self._query_graph(keyword, limit=3),  # 각 키워드당 최대 3개로 축소
+                        timeout=0.5  # 500ms 타임아웃
+                    )
 
-                for row in graph_rows[:5]:  # 각 키워드당 최대 5개
-                    node = row.get("n", {})
-                    if isinstance(node, dict):
-                        # 회사명 추출
-                        if "name" in node:
-                            company_name = node["name"]
-                            if company_name and company_name not in expansion_entities:
-                                expansion_entities.append(company_name)
+                    entities = []
+                    for row in graph_rows:
+                        node = row.get("n", {})
+                        if isinstance(node, dict):
+                            # 회사명 추출
+                            if "name" in node:
+                                name = node["name"]
+                                if name and len(name) > 1:
+                                    entities.append(name)
+                            # 제품/기술명 추출
+                            if "title" in node:
+                                title = node["title"]
+                                if title and len(title) > 2:
+                                    entities.append(title)
+                    return entities[:3]  # 각 키워드당 최대 3개
+                except (asyncio.TimeoutError, Exception) as e:
+                    print(f"[DEBUG] 온톨로지 확장 실패 ({keyword}): {e}")
+                    return []
 
-                        # 제품/기술명 추출
-                        if "title" in node:
-                            product_name = node["title"]
-                            if product_name and len(product_name) > 2 and product_name not in expansion_entities:
-                                expansion_entities.append(product_name)
+            # 상위 2개 키워드만 병렬 확장 (속도 향상)
+            tasks = [expand_keyword(kw) for kw in keywords[:2]]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            print(f"[DEBUG] 온톨로지 확장 엔티티: {expansion_entities[:8]}")
-            return expansion_entities[:8]  # 최대 8개
+            for result in results:
+                if isinstance(result, list):
+                    expansion_entities.extend(result)
+
+            # 중복 제거
+            expansion_entities = list(dict.fromkeys(expansion_entities))[:5]  # 최대 5개
+
+            if expansion_entities:
+                print(f"[DEBUG] 온톨로지 확장: {expansion_entities}")
+            return expansion_entities
 
         except Exception as e:
             print(f"[WARNING] 온톨로지 확장 실패: {e}")
@@ -1596,7 +1630,7 @@ class ChatService:
 
     @with_error_handling("neo4j", fallback_value=([], 0.0, "Neo4j 서비스 사용 불가"))
     @with_retry(max_retries=2, exceptions=(Exception,))
-    # @cache_context(ttl=1200)  # A급 달성을 위해 캐시 임시 비활성화
+    # @cache_context(ttl=600)  # 10분 캐싱 - DISABLED (Neo4j 쿼리 성능 향상)
     async def _query_graph(self, query: str, limit: int = 10):
         t0 = time.perf_counter()
         try:
@@ -1616,7 +1650,22 @@ class ChatService:
                 "lookback_days": lookback_infer or lookback_default or 180,
             }
 
+            print("[DEBUG] Neo4j 쿼리 실행:")
+            print(f"  Query: {query}")
+            print(f"  Params: {dict(params)}")
+            print(f"  Cypher 길이: {len(cypher)} chars")
+
             rows = await self.neo.query(cypher, params)
+
+            print(f"[DEBUG] Neo4j 결과: {len(rows)}개 행")
+            if rows:
+                try:
+                    print(f"  첫 번째 행 키: {list(rows[0].keys())}")
+                    # dict() 변환으로 안전하게 출력
+                    print(f"  첫 번째 행 샘플: {dict(rows[0])}")
+                except Exception as e:
+                    print(f"  첫 번째 행 출력 실패: {e}")
+
             return rows, (time.perf_counter() - t0) * 1000.0, None
         except Exception as e:
             print(f"[ERROR] [/chat] Neo4j label-aware search error: {e}")
@@ -1636,7 +1685,7 @@ class ChatService:
             print(f"[ERROR] [/chat] Stock error: {e}")
             return None, (time.perf_counter() - t0) * 1000.0, str(e)
 
-    @trace_analysis("stock_insight")
+    # @trace_analysis("stock_insight")  # Langfuse 비활성화로 인한 임시 주석
     async def _generate_llm_insights(
         self,
         query: str,
@@ -1821,7 +1870,7 @@ class ChatService:
             if self._recursion_depth > 0:
                 self._recursion_depth -= 1
 
-    @trace_llm("legacy_answer_generation")
+    # @trace_llm("legacy_answer_generation")  # Langfuse 비활성화로 인한 임시 주석
     async def _generate_answer_legacy(self, query: str) -> Dict[str, Any]:
         """기존 답변 생성 방식 (폴백용)"""
         start_time = time.time()
@@ -1858,79 +1907,65 @@ class ChatService:
             print(f"[INFO] 추출된 키워드: {keywords}")
             print(f"[INFO] 검색 쿼리: {search_query}")
 
-            async with anyio.create_task_group() as tg:
-                news_res: Dict[str, Any] = {}
-                graph_res: Dict[str, Any] = {}
-                stock_res: Dict[str, Any] = {}
+            # search_parallel 사용하여 Neo4j + OpenSearch 병렬 검색
+            print(f"[Fallback] search_parallel 호출 (Neo4j + OpenSearch 병렬 검색)")
+            try:
+                services_attempted.extend(["opensearch", "neo4j"])
+                news_hits, graph_rows, _, search_time, graph_time, news_time = await self.search_parallel(
+                    search_query,
+                    size=25
+                )
 
-                async def _news():
-                    try:
-                        services_attempted.append("opensearch")
-                        # 단순 OpenSearch + 벡터 하이브리드 검색 사용
-                        hits, ms, err = await self._search_news_simple_hybrid(query, size=5)
+                print(f"[DEBUG] Fallback 수신: graph_rows={len(graph_rows)}개, news_hits={len(news_hits)}개")
 
-                        news_res.update({
-                            "hits": hits,
-                            "latency_ms": ms,
-                            "error": err,
-                            "search_strategy": "hybrid_search",
-                            "search_confidence": 0.8,
-                            "query_used": query
-                        })
-                        
-                        if not err:
-                            error_handler.record_success("opensearch")
-                    except Exception as e:
-                        error_handler.record_error("opensearch", e)
-                        # 폴백 뉴스 데이터
-                        news_res.update({
-                            "hits": [], 
-                            "latency_ms": 0.0, 
-                            "error": f"뉴스 검색 실패: {str(e)}",
-                            "search_strategy": "fallback",
-                            "search_confidence": 0.1,
-                            "query_used": query
-                        })
+                news_res = {
+                    "hits": news_hits,
+                    "latency_ms": news_time,
+                    "error": None,
+                    "search_strategy": "parallel_search",
+                    "search_confidence": 0.8,
+                    "query_used": search_query
+                }
 
-                async def _graph():
-                    try:
-                        services_attempted.append("neo4j")
-                        # 단계별 그래프 검색 전략 (오류 처리는 메서드 데코레이터에서)
-                        rows, ms, err = await self._query_graph(search_query, limit=30)
-                        
-                        # 검색 결과가 부족할 때 추가 시도 (핵심 키워드)
-                        if not rows or len(rows) < 3:
-                            # 일반적인 비즈니스 키워드로 대체
-                            core_keywords = [k for k in keywords if k in ["상장사", "투자", "실적", "기업", "매출", "성장"]]
-                            if core_keywords:
-                                core_query = " ".join(core_keywords)
-                                rows2, ms2, err2 = await self._query_graph(core_query, limit=30)
-                                if len(rows2) > len(rows):
-                                    rows, ms, err = rows2, ms2, err2
-                        
-                        graph_res.update({"rows": rows, "latency_ms": ms, "error": err})
-                        
-                        if not err:
-                            error_handler.record_success("neo4j")
-                    except Exception as e:
-                        error_handler.record_error("neo4j", e)
-                        graph_res.update({"rows": [], "latency_ms": 0.0, "error": f"그래프 검색 실패: {str(e)}"})
+                graph_res = {
+                    "rows": graph_rows,
+                    "latency_ms": graph_time,
+                    "error": None
+                }
 
-                async def _stock():
-                    try:
-                        services_attempted.append("stock_api")
-                        price, ms, err = await self._get_stock(symbol)
-                        stock_res.update({"price": price, "latency_ms": ms, "error": err})
-                        
-                        if not err:
-                            error_handler.record_success("stock_api")
-                    except Exception as e:
-                        error_handler.record_error("stock_api", e)
-                        stock_res.update({"price": None, "latency_ms": 0.0, "error": f"주가 조회 실패: {str(e)}"})
+                error_handler.record_success("opensearch")
+                error_handler.record_success("neo4j")
 
-                tg.start_soon(_news)
-                tg.start_soon(_graph)
-                tg.start_soon(_stock)
+            except Exception as e:
+                print(f"[Fallback] search_parallel 실패: {e}")
+                news_res = {
+                    "hits": [],
+                    "latency_ms": 0.0,
+                    "error": f"검색 실패: {str(e)}",
+                    "search_strategy": "fallback",
+                    "search_confidence": 0.1,
+                    "query_used": search_query
+                }
+                graph_res = {
+                    "rows": [],
+                    "latency_ms": 0.0,
+                    "error": f"검색 실패: {str(e)}"
+                }
+                error_handler.record_error("opensearch", e)
+                error_handler.record_error("neo4j", e)
+
+            # 주가 조회는 별도 처리
+            stock_res: Dict[str, Any] = {}
+            try:
+                services_attempted.append("stock_api")
+                price, ms, err = await self._get_stock(symbol)
+                stock_res.update({"price": price, "latency_ms": ms, "error": err})
+
+                if not err:
+                    error_handler.record_success("stock_api")
+            except Exception as e:
+                error_handler.record_error("stock_api", e)
+                stock_res.update({"price": None, "latency_ms": 0.0, "error": f"주가 조회 실패: {str(e)}"})
 
             # 검색 메타데이터 준비
             search_meta = {
@@ -1973,6 +2008,7 @@ class ChatService:
                     "news_embedding_index": settings.news_embedding_index,
                 },
                 "database": settings.neo4j_database,
+                "graph_samples_shown": len(graph_res.get("rows") or []),  # Neo4j 그래프 샘플 수
             }
 
             sources = news_res.get("hits") or []
