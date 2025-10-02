@@ -31,7 +31,7 @@ except ImportError:
             return func
         return decorator
 from api.mcp import router as mcp_router  # ← 추가
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import numpy as np
 
@@ -75,9 +75,13 @@ app.include_router(monitoring_router)  # 질의-응답 트레이싱 라우터
 from api.routers import analytics_router
 app.include_router(analytics_router.router)  # 성능 분석 대시보드 라우터
 
+# 서비스 인스턴스 초기화
 chat_service = ChatService()
 report_service = ReportService()
 langgraph_engine = LangGraphReportEngine()
+
+# MCP 라우터에 서비스 주입 (MCP 엔드포인트에서 사용 가능하도록)
+mcp_router.set_services(chat_service, report_service, langgraph_engine)
 
 # 새로운 전망 리포트 요청 모델
 class ForecastReportRequest(BaseModel):
@@ -102,25 +106,30 @@ def get_langgraph_engine() -> LangGraphReportEngine:
 async def chat(
     query: str = Body(..., embed=True),
     user_id: str = Body("anonymous", embed=True),
-    session_id: Optional[str] = Body(None, embed=True)
+    session_id: Optional[str] = Body(None, embed=True),
+    force_deep_analysis: bool = Body(False, embed=True)
 ):
     """
-    온톨로지 기반 챗봇과 대화합니다. (트레이싱 포함)
+    하이브리드 라우팅 챗봇 (단순 질문: 빠른 응답 / 복잡한 질문: Multi-Agent LangGraph)
 
     Args:
         query: 사용자 질문
         user_id: 사용자 ID (선택사항)
         session_id: 세션 ID (선택사항)
+        force_deep_analysis: 강제 심층 분석 모드 (LangGraph 사용)
 
     Returns:
         답변 및 관련 정보
+        - 단순 질문: 1.5초 이내 빠른 응답
+        - 복잡한 질문: Multi-Agent 분석 (5초+, 고품질 보고서)
     """
-    # 새로운 라우터 시스템 사용 (트레이싱 포함)
+    # 하이브리드 라우터 시스템 (LangGraph 통합)
     from api.services.query_router import QueryRouter
     from api.services.response_formatter import ResponseFormatter
 
-    router = QueryRouter(chat_service, ResponseFormatter())
-    result = await router.process_query(query, user_id, session_id)
+    # LangGraph 엔진 포함한 라우터 생성
+    router = QueryRouter(chat_service, ResponseFormatter(), langgraph_engine)
+    result = await router.process_query(query, user_id, session_id, force_deep_analysis)
 
     # Convert numpy types to Python native types for JSON serialization
     def convert_numpy_types(obj):
@@ -346,22 +355,46 @@ async def create_executive_summary(
 
 # ========== LangGraph 기반 고급 컨텍스트 엔지니어링 API ==========
 
+class LangGraphReportRequest(BaseModel):
+    """LangGraph 리포트 요청 모델 (통합 및 단순화)"""
+    query: str = Field(..., description="분석 질의")
+    domain: Optional[str] = Field(None, description="도메인 키워드 (선택)")
+    lookback_days: int = Field(180, ge=1, le=720, description="분석 기간 (일)")
+    analysis_depth: str = Field("standard", description="분석 깊이: shallow, standard, deep, comprehensive")
+    symbol: Optional[str] = Field(None, description="주가 심볼 (선택)")
+
 @app.post("/report/langgraph")
 async def create_langgraph_report(
-    req: ReportRequest,
-    analysis_depth: str = Body("standard"),
+    req: LangGraphReportRequest,
     engine: LangGraphReportEngine = Depends(get_langgraph_engine)
 ):
-    """LangGraph 기반 고급 컨텍스트 엔지니어링 리포트 생성"""
+    """
+    LangGraph 기반 고급 컨텍스트 엔지니어링 리포트 생성
+
+    **사용 예시:**
+    ```json
+    {
+      "query": "삼성전자와 SK하이닉스의 HBM 경쟁력 비교",
+      "analysis_depth": "comprehensive",
+      "lookback_days": 180
+    }
+    ```
+
+    **분석 깊이 옵션:**
+    - `shallow`: 빠른 분석 (1분, 4단계)
+    - `standard`: 표준 분석 (1.5분, 6단계)
+    - `deep`: 심층 분석 (2분, 8단계)
+    - `comprehensive`: 종합 분석 (3분, 10단계+)
+    """
     try:
-        if analysis_depth not in ["shallow", "standard", "deep", "comprehensive"]:
+        if req.analysis_depth not in ["shallow", "standard", "deep", "comprehensive"]:
             raise HTTPException(status_code=400, detail="분석 깊이는 shallow, standard, deep, comprehensive 중 하나여야 합니다")
 
         result = await engine.generate_langgraph_report(
             query=req.query,
             domain=req.domain,
             lookback_days=req.lookback_days,
-            analysis_depth=analysis_depth,
+            analysis_depth=req.analysis_depth,
             symbol=req.symbol
         )
 

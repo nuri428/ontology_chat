@@ -58,25 +58,29 @@ class ContextItem:
     timestamp: str      # 수집 시간
 
 class LangGraphReportState(TypedDict):
-    """LangGraph 상태 정의"""
+    """LangGraph 상태 정의 (고품질 보고서용 확장)"""
     # 입력 정보
     query: str
     domain: Optional[str]
     lookback_days: int
     analysis_depth: AnalysisDepth
 
-    # 수집된 컨텍스트
+    # Phase 1: 분석 계획 (NEW)
+    analysis_plan: Optional[Dict[str, Any]]  # 분석 전략 및 데이터 요구사항
+
+    # Phase 2: 수집된 컨텍스트
     contexts: List[ContextItem]
 
-    # 분석 결과
+    # Phase 4: 분석 결과 (분리 복원)
     insights: List[Dict[str, Any]]
     relationships: List[Dict[str, Any]]
+    deep_reasoning: Optional[Dict[str, Any]]  # 심화 추론 (NEW)
 
-    # 리포트 생성
+    # Phase 5: 리포트 생성
     report_sections: Dict[str, str]
     final_report: str
 
-    # 품질 관리
+    # Phase 6: 품질 관리
     quality_score: float
     quality_level: ReportQuality
     retry_count: int
@@ -104,45 +108,75 @@ class LangGraphReportEngine:
             logger.warning(f"Ollama 임베딩 초기화 실패, 키워드 검색만 사용: {e}")
             self.embedding_client = None
 
-        # LLM 초기화 (비동기 호환)
+        # LLM 초기화 (Deep Analysis용 고품질 모델)
         self.llm = OllamaLLM(
-            model=settings.ollama_model,
+            model=settings.ollama_report_model,  # 변경: ollama_model → ollama_report_model
             base_url=settings.get_ollama_base_url(),
             temperature=0.1,
             num_predict=4000
         )
-        logger.info(f"[LangGraph] LLM 초기화 완료: {settings.ollama_model} @ {settings.get_ollama_base_url()}")
+        logger.info(f"[LangGraph] LLM 초기화 완료 (Deep Analysis): {settings.ollama_report_model} @ {settings.get_ollama_base_url()}")
 
         # LangGraph 워크플로우 구성
         self.workflow = self._build_workflow()
 
     def _build_workflow(self) -> StateGraph:
-        """LangGraph 워크플로우 구성"""
+        """LangGraph 워크플로우 구성 (고품질 보고서용 확장 버전)"""
 
         workflow = StateGraph(LangGraphReportState)
 
-        # 노드 추가
+        # Phase 1: 이해 및 계획
         workflow.add_node("analyze_query", self._analyze_query)
+        workflow.add_node("plan_analysis", self._plan_analysis)  # NEW
+
+        # Phase 2: 데이터 수집
         workflow.add_node("collect_parallel_data", self._collect_parallel_data)
+
+        # Phase 2.5: Context Engineering (NEW)
+        workflow.add_node("apply_context_engineering", self._apply_context_engineering)
+
+        # Phase 3: 검증 및 필터링
         workflow.add_node("cross_validate_contexts", self._cross_validate_contexts)
-        workflow.add_node("generate_insights", self._generate_insights)
-        workflow.add_node("analyze_relationships", self._analyze_relationships)
-        workflow.add_node("synthesize_report", self._synthesize_report)
+
+        # Phase 4: 분석 (분리 복원 - 고품질 우선)
+        workflow.add_node("generate_insights", self._generate_insights)  # 복원
+        workflow.add_node("analyze_relationships", self._analyze_relationships)  # 복원
+        workflow.add_node("deep_reasoning", self._deep_reasoning)  # NEW
+
+        # Phase 5: 합성
+        workflow.add_node("synthesize_report", self._synthesize_report)  # 복원
+
+        # Phase 6: 품질 관리
         workflow.add_node("quality_check", self._quality_check)
         workflow.add_node("enhance_report", self._enhance_report)
 
-        # 워크플로우 연결
+        # 워크플로우 연결 (고품질 선형 파이프라인)
         workflow.set_entry_point("analyze_query")
 
-        # 병렬 데이터 수집을 위한 개선된 연결
-        workflow.add_edge("analyze_query", "collect_parallel_data")
-        workflow.add_edge("collect_parallel_data", "cross_validate_contexts")
+        # Phase 1: 이해 → 계획
+        workflow.add_edge("analyze_query", "plan_analysis")
+
+        # Phase 2: 계획 → 수집
+        workflow.add_edge("plan_analysis", "collect_parallel_data")
+
+        # Phase 2.5: 수집 → Context Engineering
+        workflow.add_edge("collect_parallel_data", "apply_context_engineering")
+
+        # Phase 3: Context Engineering → 검증
+        workflow.add_edge("apply_context_engineering", "cross_validate_contexts")
+
+        # Phase 4: 검증 → 인사이트 → 관계 → 추론
         workflow.add_edge("cross_validate_contexts", "generate_insights")
         workflow.add_edge("generate_insights", "analyze_relationships")
-        workflow.add_edge("analyze_relationships", "synthesize_report")
+        workflow.add_edge("analyze_relationships", "deep_reasoning")
+
+        # Phase 5: 추론 → 보고서 작성
+        workflow.add_edge("deep_reasoning", "synthesize_report")
+
+        # Phase 6: 보고서 → 품질검사
         workflow.add_edge("synthesize_report", "quality_check")
 
-        # 조건부 분기
+        # 조건부 분기: 품질 낮으면 개선, 높으면 완료
         workflow.add_conditional_edges(
             "quality_check",
             self._should_enhance_report,
@@ -156,45 +190,181 @@ class LangGraphReportEngine:
         return workflow.compile()
 
     async def _analyze_query(self, state: LangGraphReportState) -> LangGraphReportState:
-        """1단계: 쿼리 분석 및 분석 전략 수립"""
+        """1단계: 통합 쿼리 분석 (고도화된 단일 프롬프트)"""
+        import time
+        start_time = time.time()
 
-        state["execution_log"].append("🔍 쿼리 분석 시작")
+        state["execution_log"].append("🔍 통합 쿼리 분석 시작")
+        logger.info(f"[LangGraph-1] 통합 쿼리 분석 시작: {state['query']}")
 
-        # 개선된 단계별 쿼리 분석
         try:
-            # 1단계: 키워드 추출
-            keyword_prompt = f"다음 질의에서 핵심 키워드 3-5개를 추출하세요. 질의: '{state['query']}'. 응답 형식: ['키워드1', '키워드2', '키워드3']"
-            keyword_response = await self._llm_invoke(keyword_prompt)
+            # 통합 분석 프롬프트 (2회 → 1회)
+            unified_prompt = f"""당신은 금융 시장 분석 전문가입니다. 다음 질의를 종합적으로 분석하세요.
 
-            # 2단계: 분석 복잡도 판단
-            complexity_prompt = f"다음 질의의 분석 복잡도를 판단하세요. 질의: '{state['query']}'. 응답: shallow, standard, deep, comprehensive 중 하나만"
-            complexity_response = await self._llm_invoke(complexity_prompt)
+질의: "{state['query']}"
 
-            # 안전한 파싱
-            keywords = self._safe_parse_keywords(keyword_response)
-            complexity = self._safe_parse_complexity(complexity_response)
+다음 JSON 형식으로 정확히 응답하세요 (다른 설명 없이 JSON만):
+{{
+  "keywords": ["키워드1", "키워드2", "키워드3"],
+  "entities": {{
+    "companies": ["회사명1", "회사명2"],
+    "products": [],
+    "sectors": []
+  }},
+  "complexity": "shallow",
+  "focus_areas": ["분석 초점 1", "초점 2"],
+  "requirements": {{
+    "시계열_분석": false,
+    "비교_분석": false,
+    "재무_분석": false
+  }}
+}}
 
-            state["analysis_depth"] = AnalysisDepth(complexity)
-            state["query_analysis"] = {
-                "keywords": keywords,
-                "complexity": complexity,
-                "focus_areas": [state['query']]  # 기본값
-            }
+분석 지침:
+- keywords: 투자자 관점의 핵심 키워드 3-5개
+- entities: 회사명, 제품명, 산업 분류
+- complexity: "shallow"(단순 조회), "standard"(일반 분석), "deep"(심층 분석), "comprehensive"(비교/전략 분석)
+- focus_areas: 질의의 핵심 분석 영역
+- requirements: 필요한 분석 유형 판단
+"""
 
-            state["execution_log"].append(f"✅ 분석 깊이 설정: {complexity}, 키워드: {keywords}")
+            response = await self._llm_invoke(unified_prompt)
+
+            # JSON 파싱
+            import re
+            # JSON 부분만 추출
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                analysis = json.loads(json_match.group())
+
+                keywords = analysis.get("keywords", [state['query']])
+                complexity = analysis.get("complexity", "standard")
+                focus_areas = analysis.get("focus_areas", [state['query']])
+                entities = analysis.get("entities", {})
+                requirements = analysis.get("requirements", {})
+
+                state["analysis_depth"] = AnalysisDepth(complexity)
+                state["query_analysis"] = {
+                    "keywords": keywords,
+                    "complexity": complexity,
+                    "focus_areas": focus_areas,
+                    "entities": entities,
+                    "requirements": requirements
+                }
+
+                state["execution_log"].append(
+                    f"✅ 통합 분석 완료: {complexity}, 키워드 {len(keywords)}개, "
+                    f"기업 {len(entities.get('companies', []))}개"
+                )
+
+            else:
+                raise ValueError("JSON 파싱 실패")
 
         except Exception as e:
-            logger.warning(f"쿼리 분석 중 오류: {e}")
+            logger.warning(f"통합 쿼리 분석 오류: {e}, 폴백 모드")
+            # 폴백: 간단한 규칙 기반 분석
             state["analysis_depth"] = AnalysisDepth.STANDARD
-            state["query_analysis"] = {"keywords": [state['query']], "complexity": "standard"}
-            state["execution_log"].append("⚠️ 기본 분석 모드로 설정")
+            state["query_analysis"] = {
+                "keywords": [state['query']],
+                "complexity": "standard",
+                "focus_areas": [state['query']],
+                "entities": {"companies": [], "products": [], "sectors": []},
+                "requirements": {}
+            }
+            state["execution_log"].append("⚠️ 폴백: 기본 분석 모드")
 
+        elapsed = time.time() - start_time
+        logger.info(f"[LangGraph-1] 통합 쿼리 분석 완료: {elapsed:.3f}초")
+        return state
+
+    async def _plan_analysis(self, state: LangGraphReportState) -> LangGraphReportState:
+        """1.5단계: 분석 전략 수립 (NEW - 고품질 보고서용)
+
+        목적: 어떤 데이터를 어떻게 분석할지 명확한 계획 수립
+        """
+        import time
+        start_time = time.time()
+
+        state["execution_log"].append("📋 분석 전략 수립 시작")
+        logger.info(f"[LangGraph-1.5] 분석 전략 수립 시작")
+
+        try:
+            query_analysis = state.get("query_analysis", {})
+            entities = query_analysis.get("entities", {})
+            focus_areas = query_analysis.get("focus_areas", [])
+
+            # 분석 전략 프롬프트
+            strategy_prompt = f"""당신은 금융 분석 전문가입니다. 다음 질의에 대한 종합적인 분석 전략을 수립하세요.
+
+질의: "{state['query']}"
+감지된 엔티티: {entities}
+초점 영역: {focus_areas}
+
+다음 JSON 형식으로 분석 계획을 작성하세요:
+{{
+  "primary_focus": ["주요 분석 목표1", "목표2"],
+  "comparison_axes": ["비교 기준1", "기준2"],
+  "required_data_types": ["필요한 데이터 유형"],
+  "expected_insights": ["예상되는 인사이트"],
+  "analysis_approach": {{
+    "quantitative": ["수치 분석 항목"],
+    "qualitative": ["정성 분석 항목"],
+    "temporal": ["시계열 분석 필요 여부"]
+  }},
+  "key_questions": ["답해야 할 핵심 질문들"]
+}}
+
+JSON만 출력하세요:
+"""
+
+            response = await self._llm_invoke(strategy_prompt)
+
+            # JSON 파싱
+            import json
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                analysis_plan = json.loads(json_match.group(0))
+                state["analysis_plan"] = analysis_plan
+
+                state["execution_log"].append(
+                    f"✅ 분석 전략 수립 완료: "
+                    f"{len(analysis_plan.get('primary_focus', []))}개 목표, "
+                    f"{len(analysis_plan.get('key_questions', []))}개 핵심 질문"
+                )
+
+                logger.info(f"[LangGraph-1.5] 분석 계획: {analysis_plan.get('primary_focus', [])}")
+            else:
+                # 폴백
+                state["analysis_plan"] = {
+                    "primary_focus": focus_areas[:3],
+                    "comparison_axes": ["시장 포지션", "성장성"],
+                    "required_data_types": ["뉴스", "재무"],
+                    "expected_insights": ["경쟁 구도", "투자 전망"],
+                    "key_questions": [state['query']]
+                }
+                state["execution_log"].append("⚠️ 기본 분석 계획 적용")
+
+        except Exception as e:
+            logger.error(f"[LangGraph-1.5] 분석 전략 수립 실패: {e}")
+            # 최소 계획
+            state["analysis_plan"] = {
+                "primary_focus": [state['query']],
+                "key_questions": [state['query']]
+            }
+            state["execution_log"].append(f"⚠️ 분석 계획 실패, 최소 모드: {e}")
+
+        elapsed = time.time() - start_time
+        logger.info(f"[LangGraph-1.5] 분석 전략 수립 완료: {elapsed:.3f}초")
         return state
 
     async def _collect_parallel_data(self, state: LangGraphReportState) -> LangGraphReportState:
         """2단계: 병렬 데이터 수집 (성능 최적화)"""
+        import time
+        start_time = time.time()
 
         state["execution_log"].append("🚀 병렬 데이터 수집 시작")
+        logger.info(f"[LangGraph-2] 병렬 데이터 수집 시작")
 
         try:
             # 병렬로 실행할 작업들
@@ -233,6 +403,119 @@ class LangGraphReportEngine:
             logger.error(f"병렬 데이터 수집 실패: {e}")
             state["execution_log"].append(f"❌ 병렬 데이터 수집 실패: {e}")
 
+        elapsed = time.time() - start_time
+        logger.info(f"[LangGraph-2] 병렬 데이터 수집 완료: {elapsed:.3f}초, 컨텍스트 {len(state['contexts'])}개")
+        return state
+
+    async def _apply_context_engineering(self, state: LangGraphReportState) -> LangGraphReportState:
+        """2.5단계: Advanced Context Engineering - 프로덕션급 컨텍스트 최적화
+
+        Best Practices (AWS/Google/Towards Data Science 2025):
+        1. Relevance Cascading - 단계적 필터링 (broad → specific)
+        2. Semantic Similarity - BGE-M3 임베딩 기반 의미 평가
+        3. Diversity Optimization - 중복 제거 및 정보 다양성 확보
+        4. Metadata Filtering - 출처/시간/신뢰도 기반 우선순위
+        5. Context Sequencing - 정보 전달 순서 최적화
+        6. Reranking & Pruning - 최종 품질 선별
+        """
+        import time
+        from datetime import datetime, timedelta
+        start_time = time.time()
+
+        state["execution_log"].append("🎯 Advanced Context Engineering 시작")
+        logger.info(f"[LangGraph-2.5] Context Engineering 시작: {len(state['contexts'])}개 컨텍스트")
+
+        try:
+            from api.services.semantic_similarity import get_semantic_filter
+
+            # === Phase 1: Relevance Cascading (단계적 필터링) ===
+            contexts_as_dicts = self._prepare_contexts_for_engineering(state["contexts"])
+            initial_count = len(contexts_as_dicts)
+
+            # Step 1.1: Source-based filtering (broad)
+            source_filtered = self._filter_by_source_priority(contexts_as_dicts)
+            logger.info(f"[LangGraph-2.5] Source filtering: {len(contexts_as_dicts)} → {len(source_filtered)}")
+
+            # Step 1.2: Recency filtering
+            recency_filtered = self._filter_by_recency(source_filtered, state.get("lookback_days", 180))
+            logger.info(f"[LangGraph-2.5] Recency filtering: {len(source_filtered)} → {len(recency_filtered)}")
+
+            # Step 1.3: Confidence filtering
+            confidence_filtered = self._filter_by_confidence(recency_filtered, threshold=0.3)
+            logger.info(f"[LangGraph-2.5] Confidence filtering: {len(recency_filtered)} → {len(confidence_filtered)}")
+
+            state["execution_log"].append(f"📊 Cascading: {initial_count} → {len(confidence_filtered)}개")
+
+            # === Phase 2: Semantic Similarity (의미적 유사도) ===
+            semantic_filter = get_semantic_filter()
+            semantic_filtered = await semantic_filter.filter_by_similarity(
+                query=state["query"],
+                documents=confidence_filtered,
+                top_k=50,
+                diversity_mode=True,
+                fast_mode=False
+            )
+
+            state["execution_log"].append(f"✅ Semantic Filtering: {len(confidence_filtered)} → {len(semantic_filtered)}개")
+            logger.info(f"[LangGraph-2.5] Semantic filtering: {len(confidence_filtered)} → {len(semantic_filtered)}")
+
+            # === Phase 3: Diversity Optimization (다양성 최적화) ===
+            diversity_score = semantic_filter.calculate_semantic_diversity(semantic_filtered)
+            state["execution_log"].append(f"📊 Diversity Score: {diversity_score:.2f}")
+            logger.info(f"[LangGraph-2.5] Diversity score: {diversity_score:.2f}")
+
+            # === Phase 4: Metadata-Enhanced Reranking (메타데이터 강화 재정렬) ===
+            metadata_reranked = self._rerank_with_metadata(
+                semantic_filtered,
+                state["query"],
+                state.get("analysis_plan", {})
+            )
+
+            # Semantic reranking 추가
+            reranked_contexts = await semantic_filter.rerank_by_semantic_relevance(
+                query=state["query"],
+                documents=metadata_reranked,
+                combine_with_original=True
+            )
+
+            logger.info(f"[LangGraph-2.5] Metadata+Semantic reranking 완료")
+
+            # === Phase 5: Context Sequencing (정보 전달 순서 최적화) ===
+            sequenced_contexts = self._sequence_contexts_for_reasoning(reranked_contexts, state["query"])
+            state["execution_log"].append(f"🔄 Context Sequencing 완료")
+            logger.info(f"[LangGraph-2.5] Context sequencing: {len(sequenced_contexts)}개")
+
+            # === Phase 6: Final Pruning (최종 선별) ===
+            final_contexts = sequenced_contexts[:30]  # Top 30
+
+            # ContextItem으로 변환
+            engineered_contexts = []
+            for idx, ctx_dict in enumerate(final_contexts):
+                context_item = ContextItem(
+                    source=ctx_dict.get("source", "unknown"),
+                    type=ctx_dict.get("type", "unknown"),
+                    content=ctx_dict.get("metadata", {}),
+                    confidence=ctx_dict.get("confidence", 0.5),
+                    relevance=ctx_dict.get("combined_score", ctx_dict.get("semantic_score", 0.5)),
+                    timestamp=ctx_dict.get("timestamp", "")
+                )
+                engineered_contexts.append(context_item)
+
+            state["contexts"] = engineered_contexts
+            state["execution_log"].append(
+                f"✅ Context Engineering 완료: {initial_count} → {len(engineered_contexts)}개 "
+                f"(다양성: {diversity_score:.2f})"
+            )
+
+        except Exception as e:
+            logger.error(f"[LangGraph-2.5] Context Engineering 실패: {e}")
+            logger.error(traceback.format_exc())
+            state["execution_log"].append(f"⚠️ Context Engineering 건너뛰기: {str(e)[:100]}")
+            # Fallback: 기본 필터링만 적용
+            state["contexts"] = state["contexts"][:30]
+
+        elapsed = time.time() - start_time
+        logger.info(f"[LangGraph-2.5] Context Engineering 완료: {elapsed:.3f}초, 최종 {len(state['contexts'])}개")
         return state
 
     async def _collect_structured_data_async(self, state: LangGraphReportState) -> Dict[str, Any]:
@@ -457,9 +740,439 @@ class LangGraphReportEngine:
         return state
 
     async def _generate_insights(self, state: LangGraphReportState) -> LangGraphReportState:
-        """5단계: LLM 기반 인사이트 생성"""
+        """4단계: 인사이트 생성 (복원 - 고품질 우선)
+
+        목적: 수집된 데이터에서 의미 있는 발견사항 도출
+        """
+        import time
+        start_time = time.time()
 
         state["execution_log"].append("💡 인사이트 생성 시작")
+        logger.info(f"[LangGraph-4] 인사이트 생성 시작")
+
+        try:
+            contexts_summary = self._prepare_comprehensive_context_summary(state["contexts"])
+            analysis_plan = state.get("analysis_plan", {})
+            key_questions = analysis_plan.get("key_questions", [state['query']])
+
+            # 인사이트 생성 프롬프트 (고품질 우선)
+            insights_prompt = f"""금융 애널리스트로서 다음 데이터를 분석하여 핵심 인사이트를 도출하세요.
+
+**질의**: {state['query']}
+**분석 목표**: {analysis_plan.get('primary_focus', [])}
+**핵심 질문**: {key_questions}
+
+**데이터**:
+{contexts_summary}
+
+다음 JSON 배열 형식으로 인사이트를 생성하세요 (3-5개):
+[
+  {{
+    "title": "인사이트 제목",
+    "type": "quantitative|qualitative|temporal|comparative",
+    "finding": "발견사항 설명 (구체적 수치 포함)",
+    "evidence": ["근거1", "근거2"],
+    "significance": "투자자 관점에서의 의미",
+    "confidence": 0.0-1.0
+  }}
+]
+
+JSON만 출력하세요:
+"""
+
+            response = await self._llm_invoke(insights_prompt)
+
+            # JSON 파싱
+            import json, re
+            json_match = re.search(r'\[[\s\S]*\]', response)
+            if json_match:
+                insights = json.loads(json_match.group(0))
+                state["insights"] = insights
+                state["execution_log"].append(f"✅ {len(insights)}개 인사이트 생성")
+                logger.info(f"[LangGraph-4] {len(insights)}개 인사이트 생성 완료")
+            else:
+                # 폴백: 텍스트에서 인사이트 추출
+                state["insights"] = [{
+                    "title": "기본 분석",
+                    "type": "comprehensive",
+                    "finding": response[:500] if response else "데이터 부족",
+                    "evidence": [f"{len(state['contexts'])}개 데이터 소스"],
+                    "significance": "종합 분석 결과",
+                    "confidence": 0.7
+                }]
+                state["execution_log"].append("⚠️ 텍스트 기반 인사이트 추출")
+
+        except Exception as e:
+            logger.error(f"[LangGraph-4] 인사이트 생성 실패: {e}")
+            state["insights"] = []
+            state["execution_log"].append(f"❌ 인사이트 생성 실패: {e}")
+
+        elapsed = time.time() - start_time
+        logger.info(f"[LangGraph-4] 인사이트 생성 완료: {elapsed:.3f}초")
+        return state
+
+    async def _analyze_relationships(self, state: LangGraphReportState) -> LangGraphReportState:
+        """5단계: 관계 분석 (복원 - 고품질 우선)
+
+        목적: 엔티티 간 연결성 및 영향 관계 파악
+        """
+        import time
+        start_time = time.time()
+
+        state["execution_log"].append("🔗 관계 분석 시작")
+        logger.info(f"[LangGraph-5] 관계 분석 시작")
+
+        try:
+            query_analysis = state.get("query_analysis", {})
+            entities = query_analysis.get("entities", {})
+            insights = state.get("insights", [])
+
+            # 관계 분석 프롬프트
+            relationships_prompt = f"""금융 애널리스트로서 다음 엔티티들 간의 관계를 분석하세요.
+
+**질의**: {state['query']}
+**엔티티**: {entities}
+**도출된 인사이트**: {[ins.get('title') for ins in insights[:3]]}
+
+다음 관계들을 분석하세요:
+1. **경쟁 관계**: 시장 내 경쟁 구도 및 상대적 포지션
+2. **공급망 관계**: 상하류 의존성 및 파트너십
+3. **이벤트 영향**: 주요 이벤트가 엔티티에 미치는 영향
+4. **시장 역학**: 시장 트렌드와 기업 전략의 관계
+
+JSON 배열로 출력하세요:
+[
+  {{
+    "type": "competition|supply_chain|event_impact|market_dynamics",
+    "entities": ["엔티티1", "엔티티2"],
+    "relationship": "관계 설명",
+    "strength": "strong|moderate|weak",
+    "impact": "긍정적/부정적 영향 설명",
+    "confidence": 0.0-1.0
+  }}
+]
+
+JSON만 출력:
+"""
+
+            response = await self._llm_invoke(relationships_prompt)
+
+            # JSON 파싱
+            import json, re
+            json_match = re.search(r'\[[\s\S]*\]', response)
+            if json_match:
+                relationships = json.loads(json_match.group(0))
+                state["relationships"] = relationships
+                state["execution_log"].append(f"✅ {len(relationships)}개 관계 분석 완료")
+                logger.info(f"[LangGraph-5] {len(relationships)}개 관계 분석 완료")
+            else:
+                # 폴백
+                state["relationships"] = [{
+                    "type": "comprehensive",
+                    "entities": list(entities.get('companies', []))[:2],
+                    "relationship": response[:300] if response else "관계 분석 데이터 부족",
+                    "strength": "moderate",
+                    "impact": "분석 필요",
+                    "confidence": 0.6
+                }]
+                state["execution_log"].append("⚠️ 기본 관계 분석 적용")
+
+        except Exception as e:
+            logger.error(f"[LangGraph-5] 관계 분석 실패: {e}")
+            state["relationships"] = []
+            state["execution_log"].append(f"❌ 관계 분석 실패: {e}")
+
+        elapsed = time.time() - start_time
+        logger.info(f"[LangGraph-5] 관계 분석 완료: {elapsed:.3f}초")
+        return state
+
+    async def _deep_reasoning(self, state: LangGraphReportState) -> LangGraphReportState:
+        """6단계: 심화 추론 (NEW - 고품질 우선)
+
+        목적: Why, How, What-if 분석을 통한 깊이 있는 통찰
+        """
+        import time
+        start_time = time.time()
+
+        state["execution_log"].append("🧠 심화 추론 시작")
+        logger.info(f"[LangGraph-6] 심화 추론 시작")
+
+        try:
+            insights = state.get("insights", [])
+            relationships = state.get("relationships", [])
+            analysis_plan = state.get("analysis_plan", {})
+
+            # 심화 추론 프롬프트
+            reasoning_prompt = f"""금융 전문가로서 다음 분석 결과를 바탕으로 심층 추론을 수행하세요.
+
+**질의**: {state['query']}
+**인사이트**: {[ins.get('title') for ins in insights]}
+**관계**: {[rel.get('type') for rel in relationships]}
+
+다음 질문에 답하세요:
+
+1. **Why (원인)**: 왜 이러한 현상이 발생했는가?
+2. **How (메커니즘)**: 어떤 메커니즘으로 작동하는가?
+3. **What-if (시나리오)**: 향후 예상 시나리오는?
+4. **So What (의미)**: 투자자에게 주는 실질적 의미는?
+
+JSON 형식으로 출력하세요:
+{{
+  "why": {{
+    "causes": ["원인1", "원인2"],
+    "analysis": "원인 분석"
+  }},
+  "how": {{
+    "mechanisms": ["메커니즘1", "메커니즘2"],
+    "analysis": "메커니즘 설명"
+  }},
+  "what_if": {{
+    "scenarios": [
+      {{"scenario": "시나리오 명", "probability": "high|medium|low", "impact": "설명"}}
+    ]
+  }},
+  "so_what": {{
+    "investor_implications": "투자 의미",
+    "actionable_insights": ["실행 가능한 인사이트"]
+  }}
+}}
+
+JSON만 출력:
+"""
+
+            response = await self._llm_invoke(reasoning_prompt)
+
+            # JSON 파싱 (강화된 로직)
+            import json, re
+
+            # 1차 시도: 가장 큰 JSON 객체 추출
+            json_pattern = r'\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\}))*\}))*\}'
+            json_matches = re.findall(json_pattern, response, re.DOTALL)
+
+            deep_reasoning = None
+            parse_error = None
+
+            # 모든 매치된 JSON에 대해 파싱 시도 (큰 것부터)
+            for json_str in sorted(json_matches, key=len, reverse=True):
+                try:
+                    parsed = json.loads(json_str)
+                    # 필수 키 검증
+                    if isinstance(parsed, dict) and any(k in parsed for k in ["why", "how", "what_if", "so_what"]):
+                        deep_reasoning = parsed
+                        logger.info(f"[LangGraph-6] JSON 파싱 성공 ({len(json_str)}자)")
+                        break
+                except json.JSONDecodeError as je:
+                    parse_error = str(je)
+                    continue
+
+            if deep_reasoning:
+                state["deep_reasoning"] = deep_reasoning
+                state["execution_log"].append("✅ 심화 추론 완료 (Why/How/What-if/So-what)")
+                logger.info(f"[LangGraph-6] 심화 추론 완료")
+            else:
+                # 폴백: 구조화된 텍스트 파싱 시도
+                logger.warning(f"[LangGraph-6] JSON 파싱 실패, 폴백 모드: {parse_error}")
+                state["deep_reasoning"] = {
+                    "why": {"causes": ["LLM 응답 파싱 실패"], "analysis": response[:300] if response else ""},
+                    "how": {"mechanisms": [], "analysis": ""},
+                    "what_if": {"scenarios": []},
+                    "so_what": {"investor_implications": "추가 분석 필요", "actionable_insights": []}
+                }
+                state["execution_log"].append(f"⚠️ 기본 추론 모드 (파싱 오류: {parse_error})")
+
+        except Exception as e:
+            logger.error(f"[LangGraph-6] 심화 추론 실패: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            state["deep_reasoning"] = {
+                "why": {"causes": ["심화 추론 오류"], "analysis": str(e)[:200]},
+                "so_what": {"investor_implications": "오류로 인한 추론 불가", "actionable_insights": []}
+            }
+            state["execution_log"].append(f"❌ 심화 추론 실패: {str(e)[:100]}")
+
+        elapsed = time.time() - start_time
+        logger.info(f"[LangGraph-6] 심화 추론 완료: {elapsed:.3f}초")
+        return state
+
+    async def _synthesize_report(self, state: LangGraphReportState) -> LangGraphReportState:
+        """7단계: 보고서 합성 (복원 - 고품질 우선)
+
+        목적: 모든 분석 결과를 종합하여 완결된 보고서 작성
+        """
+        import time
+        start_time = time.time()
+
+        state["execution_log"].append("📝 보고서 합성 시작")
+        logger.info(f"[LangGraph-7] 보고서 합성 시작")
+
+        try:
+            insights = state.get("insights", [])
+            relationships = state.get("relationships", [])
+            deep_reasoning = state.get("deep_reasoning", {})
+            analysis_plan = state.get("analysis_plan", {})
+
+            # 인사이트 요약
+            insights_summary = "\n".join([
+                f"- **{ins.get('title')}**: {ins.get('finding', '')[:150]}"
+                for ins in insights[:5]
+            ])
+
+            # 관계 요약
+            relationships_summary = "\n".join([
+                f"- {rel.get('type')}: {rel.get('relationship', '')[:100]}"
+                for rel in relationships[:3]
+            ])
+
+            # 추론 요약
+            reasoning_summary = ""
+            if deep_reasoning:
+                causes = deep_reasoning.get('why', {}).get('causes', [])
+                implications = deep_reasoning.get('so_what', {}).get('investor_implications', '')
+                reasoning_summary = f"\n\n**원인**: {', '.join(causes[:3])}\n**투자 의미**: {implications[:200]}"
+
+            # 보고서 합성 프롬프트
+            synthesis_prompt = f"""금융 애널리스트로서 다음 분석 결과를 종합하여 완결된 투자 보고서를 작성하세요.
+
+**질의**: {state['query']}
+
+**분석 결과**:
+
+### 인사이트
+{insights_summary}
+
+### 관계 분석
+{relationships_summary}
+
+### 심화 추론
+{reasoning_summary}
+
+다음 구조로 Markdown 보고서를 작성하세요:
+
+# Executive Summary
+- 핵심 발견사항 3-4개 (데이터 기반)
+
+# Market Analysis
+- 시장 상황 및 주요 동향
+- 경쟁 구도
+
+# Key Insights
+각 인사이트별로:
+- 제목 및 발견사항
+- 근거 데이터
+- 투자 관점 의미
+
+# Relationship & Competitive Analysis
+- 엔티티 간 관계
+- 시장 포지션
+- 공급망 역학
+
+# Deep Reasoning
+- 현상의 원인 (Why)
+- 작동 메커니즘 (How)
+- 예상 시나리오 (What-if)
+
+# Investment Perspective
+- 단기/중기 전망
+- 촉매 및 리스크
+- 구체적 권장사항
+
+**작성 원칙**:
+- 모든 주장에 데이터 근거 명시
+- 구체적 수치 포함
+- 실행 가능한 권고
+- 전문적이고 간결한 문체
+
+바로 시작:
+"""
+
+            response = await self._llm_invoke(synthesis_prompt)
+            state["final_report"] = response
+
+            state["report_sections"] = {
+                "executive_summary": "완료",
+                "insights": "완료",
+                "relationships": "완료",
+                "reasoning": "완료",
+                "investment": "완료"
+            }
+
+            state["execution_log"].append("✅ 보고서 합성 완료 (고품질 버전)")
+            logger.info(f"[LangGraph-7] 보고서 합성 완료")
+
+        except Exception as e:
+            logger.error(f"[LangGraph-7] 보고서 합성 실패: {e}")
+            # 폴백: 기본 보고서
+            state["final_report"] = f"""# {state['query']} 분석 보고서
+
+## Executive Summary
+{len(state.get('insights', []))}개 인사이트, {len(state.get('relationships', []))}개 관계 분석 완료
+
+## Key Insights
+{insights_summary if insights_summary else '데이터 분석 중...'}
+
+## Analysis
+상세 분석은 개별 섹션을 참조하세요.
+
+**오류**: {str(e)}
+"""
+            state["execution_log"].append(f"❌ 보고서 합성 실패, 기본 템플릿 사용: {e}")
+
+        elapsed = time.time() - start_time
+        logger.info(f"[LangGraph-7] 보고서 합성 완료: {elapsed:.3f}초")
+        return state
+
+    def _prepare_comprehensive_context_summary(self, contexts: List[ContextItem]) -> str:
+        """통합 분석을 위한 컨텍스트 요약 생성 (최적화: 간결하게)"""
+
+        if not contexts:
+            return "수집된 데이터가 없습니다."
+
+        # 유형별로 그룹핑
+        context_groups = {}
+        for ctx in contexts:
+            if ctx.type not in context_groups:
+                context_groups[ctx.type] = []
+            context_groups[ctx.type].append(ctx)
+
+        summary_parts = [f"**총 데이터**: {len(contexts)}개\n"]
+
+        # 각 유형별로 상위 2개만 포함 (간결화)
+        for ctx_type, ctx_list in context_groups.items():
+            summary_parts.append(f"\n### {ctx_type.upper()} ({len(ctx_list)}개)")
+
+            # 신뢰도 높은 순으로 정렬하여 상위 2개만
+            top_contexts = sorted(ctx_list, key=lambda x: x.confidence * x.relevance, reverse=True)[:2]
+
+            for i, ctx in enumerate(top_contexts, 1):
+                # 핵심 정보만 추출 (title, summary 등)
+                # 안전한 접근: dict와 dataclass 모두 지원
+                try:
+                    if isinstance(ctx, dict):
+                        content = ctx.get('content', {})
+                    else:
+                        content = ctx.content
+
+                    if isinstance(content, dict):
+                        title = content.get("title", content.get("name", ""))
+                        summary = content.get("summary", content.get("content", ""))[:200]  # 200자로 제한
+                        summary_parts.append(f"[{i}] {title[:100]} - {summary}")
+                    else:
+                        # JSON이 아닌 경우 간단히 처리
+                        content_str = str(content)[:150]
+                        summary_parts.append(f"[{i}] {content_str}")
+                except Exception as e:
+                    # 오류 발생시 안전하게 처리
+                    summary_parts.append(f"[{i}] 데이터 파싱 오류: {str(e)[:50]}")
+
+        return "\n".join(summary_parts)
+
+    async def _generate_insights_LEGACY_UNUSED(self, state: LangGraphReportState) -> LangGraphReportState:
+        """레거시: 사용 안 함 - 새로운 고품질 버전으로 대체됨 (625행)"""
+        import time
+        start_time = time.time()
+
+        state["execution_log"].append("💡 인사이트 생성 시작")
+        logger.info(f"[LangGraph-5] 인사이트 생성 시작")
 
         # 컨텍스트를 유형별로 그룹핑
         context_groups = {}
@@ -496,10 +1209,12 @@ class LangGraphReportEngine:
         state["insights"] = insights
         state["execution_log"].append(f"✅ {len(insights)}개 인사이트 생성")
 
+        elapsed = time.time() - start_time
+        logger.info(f"[LangGraph-5] 인사이트 생성 완료: {elapsed:.3f}초, {len(insights)}개")
         return state
 
-    async def _analyze_relationships(self, state: LangGraphReportState) -> LangGraphReportState:
-        """6단계: 컨텍스트 간 관계 분석"""
+    async def _analyze_relationships_LEGACY_UNUSED(self, state: LangGraphReportState) -> LangGraphReportState:
+        """레거시: 사용 안 함 - 새로운 고품질 버전으로 대체됨 (697행)"""
 
         state["execution_log"].append("🔗 관계 분석 시작")
 
@@ -661,7 +1376,10 @@ class LangGraphReportEngine:
         # 2. 핵심 발견사항
         if state["insights"]:
             key_findings = "\n\n".join([
-                f"**{insight['type']} 분석**\n{insight['content']}"
+                f"**{insight.get('title', insight['type'])} ({insight['type']})**\n"
+                f"{insight.get('finding', insight.get('content', ''))}\n"
+                f"*근거*: {', '.join(insight.get('evidence', []))}\n"
+                f"*의미*: {insight.get('significance', '')}"
                 for insight in state["insights"]
             ])
             sections["key_findings"] = key_findings
@@ -669,7 +1387,10 @@ class LangGraphReportEngine:
         # 3. 관계 분석
         if state["relationships"]:
             relationship_analysis = "\n\n".join([
-                f"**{rel['type']}**\n{rel['analysis']}"
+                f"**{rel['type']} ({rel.get('strength', 'moderate')})**\n"
+                f"엔티티: {', '.join(rel.get('entities', []))}\n"
+                f"{rel.get('relationship', rel.get('analysis', ''))}\n"
+                f"*영향*: {rel.get('impact', '')}"
                 for rel in state["relationships"]
             ])
             sections["relationships"] = relationship_analysis
@@ -901,6 +1622,209 @@ class LangGraphReportEngine:
         else:
             return "general_improvement"
 
+    # ========== Context Engineering Helper Methods ==========
+
+    def _prepare_contexts_for_engineering(self, contexts: List[ContextItem]) -> List[Dict[str, Any]]:
+        """컨텍스트를 Context Engineering용 dict 형식으로 변환"""
+        contexts_as_dicts = []
+        for ctx in contexts:
+            if isinstance(ctx, dict):
+                ctx_dict = ctx
+            else:
+                # ContextItem dataclass를 dict로 변환
+                ctx_dict = {
+                    "source": ctx.source,
+                    "type": ctx.type,
+                    "content": str(ctx.content.get("title", "")) + " " + str(ctx.content.get("summary", ""))[:500],
+                    "text": str(ctx.content)[:1000],  # 최대 1000자로 제한
+                    "confidence": ctx.confidence,
+                    "relevance": ctx.relevance,
+                    "timestamp": ctx.timestamp,
+                    "metadata": ctx.content
+                }
+            contexts_as_dicts.append(ctx_dict)
+        return contexts_as_dicts
+
+    def _filter_by_source_priority(self, contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """출처 우선순위 기반 필터링 (Cascading Step 1)
+
+        우선순위: neo4j (그래프 데이터) > opensearch (뉴스) > stock (시장 데이터)
+        """
+        # 출처별 우선순위 가중치
+        source_weights = {
+            "neo4j": 1.3,      # 구조화된 그래프 데이터 - 높은 신뢰도
+            "opensearch": 1.0,  # 뉴스 데이터 - 중간 신뢰도
+            "stock": 0.8        # 시장 데이터 - 보조 정보
+        }
+
+        # 출처 가중치 적용
+        for ctx in contexts:
+            source = ctx.get("source", "unknown")
+            weight = source_weights.get(source, 0.5)
+            ctx["source_weight"] = weight
+            # confidence에 가중치 반영
+            ctx["confidence"] = min(ctx.get("confidence", 0.5) * weight, 1.0)
+
+        # confidence 기준 정렬
+        return sorted(contexts, key=lambda x: x.get("confidence", 0), reverse=True)
+
+    def _filter_by_recency(self, contexts: List[Dict[str, Any]], lookback_days: int) -> List[Dict[str, Any]]:
+        """최신성 기반 필터링 (Cascading Step 2)
+
+        최근 데이터에 가중치 부여
+        """
+        from datetime import datetime, timedelta
+
+        cutoff_date = datetime.now() - timedelta(days=lookback_days)
+        filtered = []
+
+        for ctx in contexts:
+            # timestamp 파싱 시도
+            try:
+                # timestamp가 문자열인 경우 파싱
+                ts_str = ctx.get("timestamp", "")
+                if ts_str:
+                    # Unix timestamp 또는 ISO 형식 지원
+                    try:
+                        ts = float(ts_str)
+                        ctx_date = datetime.fromtimestamp(ts)
+                    except ValueError:
+                        ctx_date = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+
+                    # 최신성 점수 계산 (최근일수록 높음)
+                    days_old = (datetime.now() - ctx_date).days
+                    recency_score = max(0, 1 - (days_old / lookback_days))
+                    ctx["recency_score"] = recency_score
+                else:
+                    ctx["recency_score"] = 0.5  # 날짜 정보 없으면 중간 점수
+
+                filtered.append(ctx)
+            except Exception:
+                ctx["recency_score"] = 0.5
+                filtered.append(ctx)
+
+        return filtered
+
+    def _filter_by_confidence(self, contexts: List[Dict[str, Any]], threshold: float = 0.3) -> List[Dict[str, Any]]:
+        """신뢰도 기반 필터링 (Cascading Step 3)"""
+        return [ctx for ctx in contexts if ctx.get("confidence", 0) >= threshold]
+
+    def _rerank_with_metadata(
+        self,
+        contexts: List[Dict[str, Any]],
+        query: str,
+        analysis_plan: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """메타데이터 기반 재정렬 (Phase 4)
+
+        고려사항:
+        1. Source priority (neo4j > opensearch > stock)
+        2. Recency (최신 데이터 우선)
+        3. Confidence (신뢰도)
+        4. Analysis plan alignment (분석 계획과의 적합성)
+        """
+        for ctx in contexts:
+            # 기본 점수들
+            source_weight = ctx.get("source_weight", 1.0)
+            recency_score = ctx.get("recency_score", 0.5)
+            confidence = ctx.get("confidence", 0.5)
+            semantic_score = ctx.get("semantic_score", 0.5)
+
+            # Analysis plan과의 alignment 계산
+            plan_alignment = self._calculate_plan_alignment(ctx, analysis_plan)
+
+            # 종합 점수 계산 (가중 평균)
+            metadata_score = (
+                semantic_score * 0.35 +      # Semantic 관련성 35%
+                source_weight * 0.25 +       # 출처 신뢰도 25%
+                recency_score * 0.20 +       # 최신성 20%
+                confidence * 0.10 +          # 신뢰도 10%
+                plan_alignment * 0.10        # 분석 계획 적합성 10%
+            )
+
+            ctx["metadata_score"] = metadata_score
+
+        # 메타데이터 점수 기준 정렬
+        return sorted(contexts, key=lambda x: x.get("metadata_score", 0), reverse=True)
+
+    def _calculate_plan_alignment(self, context: Dict[str, Any], analysis_plan: Dict[str, Any]) -> float:
+        """컨텍스트가 분석 계획과 얼마나 일치하는지 계산"""
+        if not analysis_plan:
+            return 0.5
+
+        score = 0.5  # 기본 점수
+
+        # Primary focus 키워드 매칭
+        primary_focus = analysis_plan.get("primary_focus", [])
+        ctx_text = str(context.get("content", "")).lower()
+
+        for focus in primary_focus:
+            if focus.lower() in ctx_text:
+                score += 0.1
+
+        # Required data types 매칭
+        required_types = analysis_plan.get("required_data_types", [])
+        ctx_type = context.get("type", "")
+
+        if ctx_type in required_types:
+            score += 0.2
+
+        return min(score, 1.0)
+
+    def _sequence_contexts_for_reasoning(
+        self,
+        contexts: List[Dict[str, Any]],
+        query: str
+    ) -> List[Dict[str, Any]]:
+        """정보 전달 순서 최적화 (Phase 5)
+
+        정보 전달 순서:
+        1. Overview/Definitions (개요/정의) - 배경 이해
+        2. Recent News (최근 뉴스) - 현재 상황
+        3. Relationships/Analysis (관계/분석) - 심화 이해
+        4. Supporting Data (보조 데이터) - 추가 근거
+        """
+        # 컨텍스트 타입별 우선순위
+        type_priority = {
+            "company": 1,      # 기업 정보 - 가장 먼저
+            "news": 2,         # 뉴스 - 두 번째
+            "event": 2,        # 이벤트 - 뉴스와 동일
+            "contract": 3,     # 계약 - 세 번째
+            "stock": 4,        # 주가 - 네 번째 (보조 정보)
+            "analysis": 3      # 분석 - 세 번째
+        }
+
+        # 각 컨텍스트에 시퀀스 점수 부여
+        for ctx in contexts:
+            ctx_type = ctx.get("type", "unknown")
+            recency = ctx.get("recency_score", 0.5)
+
+            # 타입 우선순위
+            type_score = 5 - type_priority.get(ctx_type, 5)  # 역순 (1이 가장 높음)
+
+            # Sequence score = 타입 우선순위 + 최신성 보너스
+            sequence_score = type_score + (recency * 0.3)
+
+            ctx["sequence_score"] = sequence_score
+
+        # Sequence score 기준 정렬 (높을수록 먼저)
+        sequenced = sorted(contexts, key=lambda x: x.get("sequence_score", 0), reverse=True)
+
+        # 같은 타입 내에서는 semantic_score로 재정렬
+        final_sequence = []
+        for type_name in ["company", "news", "contract", "stock", "analysis"]:
+            type_contexts = [c for c in sequenced if c.get("type") == type_name]
+            type_contexts.sort(key=lambda x: x.get("combined_score", x.get("semantic_score", 0)), reverse=True)
+            final_sequence.extend(type_contexts)
+
+        # 타입 분류되지 않은 것들 추가
+        unclassified = [c for c in sequenced if c.get("type", "unknown") not in ["company", "news", "contract", "stock", "analysis"]]
+        final_sequence.extend(unclassified)
+
+        return final_sequence
+
+    # ========== End of Context Engineering Helpers ==========
+
     def _should_enhance_report(self, state: LangGraphReportState) -> str:
         """개선된 품질 검증 후 개선 여부 결정"""
 
@@ -914,22 +1838,20 @@ class LangGraphReportEngine:
         retry_count = state.get("retry_count", 0)
         quality_score = state.get("quality_score", 0.0)
 
-        # 재시도 횟수 제한 (최대 3회)
-        if retry_count >= 3:
+        # 재시도 횟수 제한 (최대 1회로 축소 - 성능 최적화)
+        if retry_count >= 1:
             logger.warning(f"[LangGraph] 최대 재시도 횟수 초과: {retry_count}회")
             state["execution_log"].append("⚠️ 최대 재시도 횟수 초과, 현재 결과로 완료")
             return "complete"
 
-        # 품질 기준에 따른 재시도 결정
+        # 품질 기준에 따른 재시도 결정 (조건 강화 - 성능 최적화)
         should_retry = False
 
-        # POOR 품질은 항상 재시도
-        if quality_level == ReportQuality.POOR:
+        # POOR 품질이고 점수가 정말 낮을 때만 재시도 (0.3 이하)
+        if quality_level == ReportQuality.POOR and quality_score < 0.3:
             should_retry = True
 
-        # ACCEPTABLE도 점수가 너무 낮으면 재시도
-        elif quality_level == ReportQuality.ACCEPTABLE and quality_score < 0.45:
-            should_retry = True
+        # ACCEPTABLE은 재시도하지 않음 (성능 최적화)
 
         # 리포트가 너무 짧으면 재시도
         elif len(state.get("final_report", "")) < 300:
@@ -1203,6 +2125,159 @@ class LangGraphReportEngine:
 
     # ========== 공개 API ==========
 
+    async def stream_report(
+        self,
+        query: str,
+        *,
+        domain: Optional[str] = None,
+        lookback_days: int = 180,
+        analysis_depth: str = "standard",
+        symbol: Optional[str] = None
+    ):
+        """스트리밍 보고서 생성 (실시간 진행 상황 전송)"""
+        import time
+        from typing import AsyncIterator
+
+        start_time = time.time()
+
+        # 진행률 매핑 (Context Engineering 추가)
+        WORKFLOW_STAGES = {
+            "analyze_query": (0.08, "쿼리 분석"),
+            "plan_analysis": (0.12, "분석 전략 수립"),
+            "collect_parallel_data": (0.18, "데이터 수집"),
+            "apply_context_engineering": (0.25, "컨텍스트 최적화"),  # NEW
+            "cross_validate_contexts": (0.30, "데이터 검증"),
+            "generate_insights": (0.45, "인사이트 생성"),
+            "analyze_relationships": (0.60, "관계 분석"),
+            "deep_reasoning": (0.75, "심화 추론"),
+            "synthesize_report": (0.85, "보고서 작성"),
+            "quality_check": (0.95, "품질 검사"),
+            "enhance_report": (1.00, "보고서 개선")
+        }
+
+        try:
+            # 초기 상태
+            initial_state = self._initialize_state(
+                query=query,
+                domain=domain,
+                lookback_days=lookback_days,
+                analysis_depth=analysis_depth,
+                symbol=symbol
+            )
+
+            logger.info(f"[Streaming] 시작: query={query}, depth={analysis_depth}")
+
+            # 시작 이벤트
+            yield {
+                "type": "start",
+                "data": {
+                    "query": query,
+                    "analysis_depth": analysis_depth,
+                    "timestamp": time.time()
+                }
+            }
+
+            # LangGraph 스트리밍 실행 (astream 사용)
+            final_state = None
+            node_sequence = [
+                "analyze_query", "plan_analysis", "collect_parallel_data",
+                "apply_context_engineering",  # NEW
+                "cross_validate_contexts", "generate_insights", "analyze_relationships",
+                "deep_reasoning", "synthesize_report", "quality_check", "enhance_report"
+            ]
+            current_node_idx = 0
+
+            async for state_chunk in self.workflow.astream(initial_state):
+                # state_chunk는 각 노드 실행 후의 전체 state
+                final_state = state_chunk
+
+                # 노드 순서대로 진행 이벤트 전송
+                if current_node_idx < len(node_sequence):
+                    node_name = node_sequence[current_node_idx]
+                    progress, message = WORKFLOW_STAGES.get(node_name, (0.0, "처리 중"))
+
+                    # 완료 이벤트 전송
+                    partial_data = {}
+                    if "insights" in state_chunk:
+                        partial_data["insights_count"] = len(state_chunk["insights"])
+                    if "relationships" in state_chunk:
+                        partial_data["relationships_count"] = len(state_chunk["relationships"])
+                    if "quality_score" in state_chunk:
+                        partial_data["quality_score"] = state_chunk["quality_score"]
+
+                    yield {
+                        "type": "step",
+                        "data": {
+                            "node": node_name,
+                            "status": "completed",
+                            "elapsed_time": time.time() - start_time,
+                            **partial_data
+                        }
+                    }
+
+                    current_node_idx += 1
+
+                    # 다음 노드 시작 이벤트 (마지막 노드가 아니면)
+                    if current_node_idx < len(node_sequence):
+                        next_node = node_sequence[current_node_idx]
+                        next_progress, next_message = WORKFLOW_STAGES.get(next_node, (0.0, "처리 중"))
+                        yield {
+                            "type": "progress",
+                            "data": {
+                                "stage": next_node,
+                                "status": "started",
+                                "message": next_message,
+                                "progress": next_progress,
+                                "elapsed_time": time.time() - start_time
+                            }
+                        }
+
+            if not final_state:
+                final_state = initial_state
+
+            final_state["processing_time"] = time.time() - start_time
+
+            # 품질 레벨 처리
+            quality_level = "poor"
+            if "quality_level" in final_state:
+                if isinstance(final_state["quality_level"], ReportQuality):
+                    quality_level = final_state["quality_level"].value
+                else:
+                    quality_level = str(final_state["quality_level"]).lower()
+                    if quality_level not in ["poor", "acceptable", "good", "excellent"]:
+                        quality_level = "poor"
+
+            # 최종 결과 전송
+            yield {
+                "type": "final",
+                "data": {
+                    "markdown": final_state.get("final_report", "보고서 생성 실패"),
+                    "quality_score": final_state.get("quality_score", 0.0),
+                    "quality_level": quality_level,
+                    "contexts_count": len(final_state.get("contexts", [])),
+                    "insights_count": len(final_state.get("insights", [])),
+                    "relationships_count": len(final_state.get("relationships", [])),
+                    "processing_time": final_state.get("processing_time", 0.0),
+                    "retry_count": final_state.get("retry_count", 0),
+                    "execution_log": final_state.get("execution_log", [])
+                }
+            }
+
+            logger.info(f"[Streaming] 완료: time={final_state['processing_time']:.1f}s, quality={final_state['quality_score']:.2f}")
+
+        except Exception as e:
+            logger.error(f"[Streaming] 오류: {e}")
+            logger.error(traceback.format_exc())
+
+            yield {
+                "type": "error",
+                "data": {
+                    "error": str(e),
+                    "stage": current_node or "unknown",
+                    "elapsed_time": time.time() - start_time
+                }
+            }
+
     async def generate_langgraph_report(
         self,
         query: str,
@@ -1212,7 +2287,7 @@ class LangGraphReportEngine:
         analysis_depth: str = "standard",
         symbol: Optional[str] = None
     ) -> Dict[str, Any]:
-        """LangGraph 기반 고급 리포트 생성"""
+        """LangGraph 기반 고급 리포트 생성 (동기 버전)"""
 
         import time
         start_time = time.time()
