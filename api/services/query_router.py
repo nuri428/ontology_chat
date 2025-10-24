@@ -388,6 +388,19 @@ class QueryRouter:
         if any(kw in query for kw in temporal_keywords):
             score += 0.15
 
+        # 6. 비교 + 분석 조합 감지 (P0-1: 핵심 개선)
+        # "비교 분석", "경쟁력 비교" 같은 고난이도 질의 감지
+        comparison_keywords = ["비교", "대비", "vs", "versus", "경쟁"]
+        analysis_keywords = ["분석", "평가", "전망", "전략", "경쟁력"]
+
+        has_comparison = any(kw in query for kw in comparison_keywords)
+        has_analysis = any(kw in query for kw in analysis_keywords)
+
+        # 비교 + 분석 조합 = 최고 난이도 (comprehensive 필요)
+        if has_comparison and has_analysis:
+            score += 0.35  # 추가 보너스로 0.9+ 보장
+            logger.debug(f"[복잡도] 비교+분석 조합 감지 → +0.35 보너스")
+
         return min(1.0, score)
 
     def _requires_deep_analysis(self, query: str) -> bool:
@@ -421,19 +434,20 @@ class QueryRouter:
                 complexity_score = max(complexity_score, 0.95)
                 logger.info(f"[LangGraph] 강제 심층 분석 모드 활성화 → 복잡도 점수 강제 상향: {complexity_score:.2f}")
 
-            # 복잡도에 따른 분석 깊이 결정 (고품질 우선 - 타임아웃 대폭 증가)
+            # 복잡도에 따른 분석 깊이 결정 (고품질 우선 - 타임아웃 여유 확보)
+            # P0-2: 각 depth별 20-30% 여유 시간 추가
             if complexity_score >= 0.9:
                 analysis_depth = "comprehensive"
-                timeout_seconds = 180.0  # 3분 (매우 복잡한 질의 - 10단계+ 워크플로우)
+                timeout_seconds = 240.0  # 4분 (기존 3분 → +60초 여유, 10단계+ 워크플로우)
             elif complexity_score >= 0.85:
                 analysis_depth = "deep"
-                timeout_seconds = 120.0  # 2분 (복잡한 질의 - 8단계+ 워크플로우)
+                timeout_seconds = 180.0  # 3분 (기존 2분 → +60초 여유, 8단계+ 워크플로우)
             elif complexity_score >= 0.7:
                 analysis_depth = "standard"
-                timeout_seconds = 90.0   # 1.5분 (보통 질의 - 6단계+ 워크플로우)
+                timeout_seconds = 120.0  # 2분 (기존 1.5분 → +30초 여유, 6단계+ 워크플로우)
             else:
                 analysis_depth = "shallow"
-                timeout_seconds = 60.0   # 1분 (단순 질의 - 4단계+ 워크플로우)
+                timeout_seconds = 90.0   # 1.5분 (기존 1분 → +30초 여유, 4단계+ 워크플로우)
 
             logger.info(f"[LangGraph] 분석 깊이: {analysis_depth} (복잡도: {complexity_score:.2f}, 타임아웃: {timeout_seconds}초)")
 

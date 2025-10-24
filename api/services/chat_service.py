@@ -394,18 +394,18 @@ class ChatService:
         # SearchNewsTool 인스턴스 추가 (임베딩 기능 사용)
         self.os_tool = self._create_search_tool()
 
-        # langchain_ollama 직접 초기화 (래퍼 제거로 성능 향상)
+        # langchain_ollama 직접 초기화 (Fast Chat용 경량 모델)
         self.ollama_llm = None
         if LANGCHAIN_OLLAMA_AVAILABLE:
             try:
                 ollama_url = settings.get_ollama_base_url()
                 self.ollama_llm = OllamaLLM(
-                    model=settings.ollama_model,
+                    model=settings.ollama_chat_model,  # 변경: ollama_model → ollama_chat_model
                     base_url=ollama_url,
                     temperature=0.1,
                     timeout=30
                 )
-                print(f"[INFO] Ollama LLM 초기화 완료: {settings.ollama_model} @ {ollama_url}")
+                print(f"[INFO] Ollama LLM 초기화 완료 (Fast Chat): {settings.ollama_chat_model} @ {ollama_url}")
             except Exception as e:
                 print(f"[WARNING] Ollama LLM 초기화 실패: {e}")
                 self.ollama_llm = None

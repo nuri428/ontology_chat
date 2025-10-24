@@ -1625,7 +1625,12 @@ JSON만 출력:
     # ========== Context Engineering Helper Methods ==========
 
     def _prepare_contexts_for_engineering(self, contexts: List[ContextItem]) -> List[Dict[str, Any]]:
-        """컨텍스트를 Context Engineering용 dict 형식으로 변환"""
+        """컨텍스트를 Context Engineering용 dict 형식으로 변환
+
+        하이브리드 전략:
+        1. 신규 스키마 필드 (quality_score, is_featured 등) 활용
+        2. 필드 없으면 기존 데이터로 자체 계산
+        """
         contexts_as_dicts = []
         for ctx in contexts:
             if isinstance(ctx, dict):
@@ -1636,34 +1641,118 @@ JSON만 출력:
                     "source": ctx.source,
                     "type": ctx.type,
                     "content": str(ctx.content.get("title", "")) + " " + str(ctx.content.get("summary", ""))[:500],
-                    "text": str(ctx.content)[:1000],  # 최대 1000자로 제한
+                    "text": str(ctx.content)[:1000],
                     "confidence": ctx.confidence,
                     "relevance": ctx.relevance,
                     "timestamp": ctx.timestamp,
-                    "metadata": ctx.content
+                    "metadata": ctx.content,
+
+                    # ⭐⭐⭐ 신규 스키마 필드 (금일부터 채워짐)
+                    "quality_score": ctx.content.get("quality_score"),  # NULL 가능
+                    "is_featured": ctx.content.get("is_featured", False),
+                    "neo4j_synced": ctx.content.get("neo4j_synced", False),
+                    "ontology_status": ctx.content.get("ontology_status"),
+                    "neo4j_node_count": ctx.content.get("neo4j_node_count", 0),
+                    "event_chain_id": ctx.content.get("event_chain_id"),
                 }
+
+            # 필드 없으면 자체 계산 (Fallback)
+            if ctx_dict.get("quality_score") is None:
+                ctx_dict["quality_score"] = self._calculate_content_quality(ctx_dict)
+
             contexts_as_dicts.append(ctx_dict)
         return contexts_as_dicts
+
+    def _calculate_content_quality(self, ctx: Dict[str, Any]) -> float:
+        """컨텐츠 자체 품질 점수 계산 (신규 필드 없을 때 Fallback)
+
+        기존 데이터만으로 품질 평가:
+        - 내용 길이 (40%)
+        - 정보 밀도 (30%)
+        - 제목 품질 (15%)
+        - 요약 존재 (15%)
+        """
+        import re
+
+        content = ctx.get("content", "")
+        metadata = ctx.get("metadata", {})
+
+        # 1. 내용 길이 점수 (0.0-1.0)
+        content_length = len(content)
+        if content_length > 1000:
+            length_score = 1.0
+        elif content_length > 500:
+            length_score = 0.8
+        elif content_length > 200:
+            length_score = 0.5
+        else:
+            length_score = 0.3
+
+        # 2. 정보 밀도 점수 (키워드 다양성)
+        has_numbers = bool(re.search(r'\d+', content))
+        has_percentage = bool(re.search(r'\d+%', content))
+        has_money = bool(re.search(r'\d+억|\d+조|\$\d+', content))
+        has_company = bool(re.search(r'삼성|SK|LG|현대|포스코', content))
+
+        density_score = 0.0
+        density_score += 0.25 if has_numbers else 0
+        density_score += 0.25 if has_percentage else 0
+        density_score += 0.25 if has_money else 0
+        density_score += 0.25 if has_company else 0
+
+        # 3. 제목 품질
+        title = metadata.get("title", "")
+        title_length = len(title)
+        title_quality = 1.0 if 10 < title_length < 100 else 0.5
+
+        # 4. 요약 존재
+        summary = metadata.get("summary", "")
+        has_summary = 1.0 if len(summary) > 50 else 0.5
+
+        # 최종 점수 (0.0-1.0)
+        quality_score = (
+            length_score * 0.40 +
+            density_score * 0.30 +
+            title_quality * 0.15 +
+            has_summary * 0.15
+        )
+
+        return round(quality_score, 2)
 
     def _filter_by_source_priority(self, contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """출처 우선순위 기반 필터링 (Cascading Step 1)
 
-        우선순위: neo4j (그래프 데이터) > opensearch (뉴스) > stock (시장 데이터)
+        하이브리드 전략:
+        1. 기본 출처 가중치 적용
+        2. ⭐ quality_score 반영 (있으면)
+        3. ⭐ is_featured 보너스 (있으면)
+        4. ⭐ neo4j_synced 보너스 (있으면)
         """
-        # 출처별 우선순위 가중치
+        # 기본 출처별 우선순위 가중치
         source_weights = {
-            "neo4j": 1.3,      # 구조화된 그래프 데이터 - 높은 신뢰도
-            "opensearch": 1.0,  # 뉴스 데이터 - 중간 신뢰도
-            "stock": 0.8        # 시장 데이터 - 보조 정보
+            "neo4j": 1.3,
+            "opensearch": 1.0,
+            "stock": 0.8
         }
 
-        # 출처 가중치 적용
         for ctx in contexts:
             source = ctx.get("source", "unknown")
-            weight = source_weights.get(source, 0.5)
-            ctx["source_weight"] = weight
-            # confidence에 가중치 반영
-            ctx["confidence"] = min(ctx.get("confidence", 0.5) * weight, 1.0)
+            base_weight = source_weights.get(source, 0.5)
+
+            # ⭐ 신규 스키마 필드 활용 (금일부터 채워짐)
+            quality_score = ctx.get("quality_score", 0.5)  # 자체 계산 또는 DB 값
+
+            # ⭐ is_featured 보너스 (+0.3)
+            featured_bonus = 0.3 if ctx.get("is_featured", False) else 0
+
+            # ⭐ neo4j_synced 보너스 (+0.2)
+            synced_bonus = 0.2 if ctx.get("neo4j_synced", False) else 0
+
+            # 최종 가중치 = 출처 * (품질 + 보너스)
+            final_weight = base_weight * (quality_score + featured_bonus + synced_bonus)
+
+            ctx["source_weight"] = final_weight
+            ctx["confidence"] = min(ctx.get("confidence", 0.5) * final_weight, 1.0)
 
         # confidence 기준 정렬
         return sorted(contexts, key=lambda x: x.get("confidence", 0), reverse=True)
@@ -1717,32 +1806,45 @@ JSON만 출력:
     ) -> List[Dict[str, Any]]:
         """메타데이터 기반 재정렬 (Phase 4)
 
-        고려사항:
-        1. Source priority (neo4j > opensearch > stock)
-        2. Recency (최신 데이터 우선)
-        3. Confidence (신뢰도)
-        4. Analysis plan alignment (분석 계획과의 적합성)
+        하이브리드 전략:
+        1. 기본 메타데이터 (source, recency, semantic)
+        2. ⭐ 신규 스키마 메타데이터 (quality_score, neo4j_node_count 등)
         """
         for ctx in contexts:
-            # 기본 점수들
+            # 기본 점수들 (50%)
             source_weight = ctx.get("source_weight", 1.0)
             recency_score = ctx.get("recency_score", 0.5)
-            confidence = ctx.get("confidence", 0.5)
             semantic_score = ctx.get("semantic_score", 0.5)
 
-            # Analysis plan과의 alignment 계산
-            plan_alignment = self._calculate_plan_alignment(ctx, analysis_plan)
-
-            # 종합 점수 계산 (가중 평균)
-            metadata_score = (
-                semantic_score * 0.35 +      # Semantic 관련성 35%
-                source_weight * 0.25 +       # 출처 신뢰도 25%
-                recency_score * 0.20 +       # 최신성 20%
-                confidence * 0.10 +          # 신뢰도 10%
-                plan_alignment * 0.10        # 분석 계획 적합성 10%
+            base_score = (
+                semantic_score * 0.30 +      # Semantic 관련성 30%
+                source_weight * 0.12 +       # 출처 신뢰도 12%
+                recency_score * 0.08         # 최신성 8%
             )
 
-            ctx["metadata_score"] = metadata_score
+            # ⭐ 신규 스키마 메타데이터 (30%)
+            quality_score = ctx.get("quality_score", 0.5)  # 자체 계산 또는 DB 값
+            is_featured = ctx.get("is_featured", False)
+            neo4j_synced = ctx.get("neo4j_synced", False)
+            neo4j_node_count = ctx.get("neo4j_node_count", 0)
+
+            # Neo4j 연결성 보너스 (최대 0.1)
+            connectivity_bonus = min(neo4j_node_count / 10.0, 0.1)
+
+            schema_score = (
+                quality_score * 0.15 +                              # quality_score 15%
+                (0.1 if is_featured else 0.0) +                    # is_featured 10%
+                (0.05 if neo4j_synced else 0.0) +                  # neo4j_synced 5%
+                connectivity_bonus                                  # connectivity 최대 10%
+            )
+
+            # Analysis plan alignment (20%)
+            plan_alignment = self._calculate_plan_alignment(ctx, analysis_plan)
+
+            # 최종 점수 = 기본(50%) + 스키마(30%) + 계획(20%)
+            metadata_score = base_score + schema_score + (plan_alignment * 0.20)
+
+            ctx["metadata_score"] = round(metadata_score, 3)
 
         # 메타데이터 점수 기준 정렬
         return sorted(contexts, key=lambda x: x.get("metadata_score", 0), reverse=True)

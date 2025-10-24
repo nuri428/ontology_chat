@@ -26,7 +26,13 @@ class Settings(BaseSettings):
     
     # Ollama LLM 설정
     ollama_host: str = "localhost"
-    ollama_model: str = "llama3.1:8b"
+
+    # Dual-Model 전략: 용도별 모델 분리
+    ollama_chat_model: str = "gemma3:4b"      # Fast Chat: 빠른 응답, 대화, 히스토리
+    ollama_report_model: str = "llama3.1:8b"  # Deep Analysis: 고품질 보고서, 복잡한 분석
+
+    # 레거시 호환성 (기본값: chat_model)
+    ollama_model: str = "gemma3:4b"
 
     # BGE-M3 임베딩 설정 (원격 서버)
     bge_m3_host: str = "192.168.0.10"

@@ -1,0 +1,12 @@
+{
+  "timestamp": "20251002_212713",
+  "results": {
+    "simple": {
+      "error": "'ChatService' object has no attribute 'intent_analyzer'"
+    },
+    "complex": {
+      "error": "cannot import name 'LangGraphReportService' from 'api.services.langgraph_report_service' (/data/dev/git/ontology_chat/api/services/langgraph_report_service.py)"
+    }
+  },
+  "timings": {}
+}

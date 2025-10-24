@@ -1,0 +1,57 @@
+{
+  "timestamp": "20251002_221833",
+  "optimization_info": {
+    "phase_1": "query analysis unified (2 → 1 LLM calls)",
+    "phase_2": "comprehensive analysis unified (5-9 → 1 LLM calls)",
+    "expected_improvement": "15-20s → 6-8s (50-60% faster)"
+  },
+  "tests": [
+    {
+      "query": "삼성전자와 SK하이닉스의 HBM 경쟁력 비교",
+      "status": "success",
+      "response_time": "30.37s",
+      "quality_score": 0.0,
+      "quality_level": "unknown",
+      "contexts_count": 0,
+      "insights_count": 0,
+      "relationships_count": 0,
+      "retry_count": 0,
+      "processing_time": 0.0,
+      "execution_log": []
+    },
+    {
+      "query": "AI 반도체 시장에서 HBM 기술 경쟁력을 가진 기업은?",
+      "status": "success",
+      "response_time": "10.45s",
+      "quality_score": 0.0,
+      "quality_level": "unknown",
+      "contexts_count": 0,
+      "insights_count": 0,
+      "relationships_count": 0,
+      "retry_count": 0,
+      "processing_time": 0.0,
+      "execution_log": []
+    },
+    {
+      "query": "현대차 전기차 사업 현황은?",
+      "status": "success",
+      "response_time": "10.31s",
+      "quality_score": 0.0,
+      "quality_level": "unknown",
+      "contexts_count": 0,
+      "insights_count": 0,
+      "relationships_count": 0,
+      "retry_count": 0,
+      "processing_time": 0.0,
+      "execution_log": []
+    }
+  ],
+  "summary": {
+    "success_rate": "3/3",
+    "avg_response_time": "17.04s",
+    "avg_processing_time": "0.00s",
+    "avg_quality_score": 0.0,
+    "improvement_achieved": false,
+    "target_met": false
+  }
+}

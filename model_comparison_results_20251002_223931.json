@@ -1,0 +1,334 @@
+{
+  "timestamp": "2025-10-02 22:32:53",
+  "models": {
+    "llama3.1:8b": {
+      "model_name": "llama3.1:8b",
+      "size": "4.9GB",
+      "priority": "baseline",
+      "tests": [
+        {
+          "prompt_type": "간단한 분석",
+          "speed": {
+            "total_time": 6.1110405921936035,
+            "generation_time": 4.516267041,
+            "tokens_per_sec": 37.19886323701557,
+            "tokens_generated": 168
+          },
+          "quality": {
+            "length": 1.0,
+            "korean_quality": 1.0,
+            "structure": 0.6,
+            "finance_terms": 0.2,
+            "overall": 0.7000000000000001
+          },
+          "response_preview": "**응답**: \n\n삼성전자의 HBM(High Bandwidth Memory, 초고속 메모리) 경쟁력을 강화하고 있다. HBM은 고성능 컴퓨팅과 AI을 위한 고부피의 데이터를 처리할 수 있는 빠른 메모리 기술로, 삼성전자는 이 분야에서 세계적 선두주자입니다. HBM이 적용된 노드에서 Hynix와 SKHynix와 경쟁하고 있지만, HBM이 최초로 양산된 노드는 삼성전자이다. \n\n**추가**: 삼성 전자의 경쟁력을 강화하는 또 다른 이유는 HBM에 대한 자체 설계 및 개발 능력이며, 이는 세계적 선두주자로서의 위치를 공고히 할 수 있는 "
+        },
+        {
+          "prompt_type": "종합 분석",
+          "speed": {
+            "total_time": 11.613209247589111,
+            "generation_time": 11.514758273,
+            "tokens_per_sec": 43.94360593625985,
+            "tokens_generated": 506
+          },
+          "quality": {
+            "length": 1.0,
+            "korean_quality": 1.0,
+            "structure": 1.0,
+            "finance_terms": 1.0,
+            "overall": 1.0
+          },
+          "response_preview": "**삼성전자와 SK하이닉스의 HBM 경쟁력 비교**\n\n## Executive Summary\n\n*   **HBM3E 개발 추세 차이**: 삼성전자만 HBM3E 16단 개발 중에 있으며, 하이브리드 본딩 기술 도입을 계획하고 있다.\n*   **기술 경쟁력 차이**: SK하이닉스는 이미 HBM3E를 양산 중이며, 엔비디아와의 주요 공급업체 관계를 유지하고 있다.\n*   **시장 점유율 영향**: 이러한 기술 및 시장 구조 차이는 향후 양산량과 수익성에 크게 영향을 줄 것으로 예상된다.\n\n## Market Analysis\n\nHBM(High"
+        }
+      ],
+      "summary": {
+        "avg_tokens_per_sec": 40.571234586637715,
+        "avg_quality_score": 0.8500000000000001,
+        "comprehensive_analysis_time": 11.613209247589111,
+        "score": 67.2284938346551
+      }
+    },
+    "qwen3:8b": {
+      "model_name": "qwen3:8b",
+      "size": "5.2GB",
+      "priority": "high",
+      "tests": [
+        {
+          "prompt_type": "간단한 분석",
+          "speed": {
+            "total_time": 9.601313591003418,
+            "generation_time": 6.305546222,
+            "tokens_per_sec": 42.50226555551209,
+            "tokens_generated": 268
+          },
+          "quality": {
+            "length": 0.3,
+            "korean_quality": 0.5,
+            "structure": 0.6,
+            "finance_terms": 0.6,
+            "overall": 0.5
+          },
+          "response_preview": "<think>\nOkay, the user is asking about Samsung's HBM competitiveness. Let me recall what I know. HBM, or High Bandwidth Memory, is crucial for AI and high-performance computing. Samsung is a major player in this space. They have a significant market share, right? They've been investing in HBM techno"
+        },
+        {
+          "prompt_type": "종합 분석",
+          "speed": {
+            "total_time": 16.753646850585938,
+            "generation_time": 16.636602348,
+            "tokens_per_sec": 42.857308546880944,
+            "tokens_generated": 713
+          },
+          "quality": {
+            "length": 0.3,
+            "korean_quality": 0.5,
+            "structure": 1.0,
+            "finance_terms": 1.0,
+            "overall": 0.7
+          },
+          "response_preview": "<think>\nOkay, I need to create an investment analysis report comparing Samsung and SK Hynix's HBM competitiveness. The user provided specific data points. Let me start by breaking down the query.\n\nFirst, the Executive Summary needs three key findings. The data says Samsung is developing HBM3E with h"
+        }
+      ],
+      "summary": {
+        "avg_tokens_per_sec": 42.67978705119651,
+        "avg_quality_score": 0.6,
+        "comprehensive_analysis_time": 16.753646850585938,
+        "score": 53.07191482047861
+      }
+    },
+    "qwen3:8b-q8_0": {
+      "model_name": "qwen3:8b-q8_0",
+      "size": "8.9GB",
+      "priority": "high",
+      "tests": [
+        {
+          "prompt_type": "간단한 분석",
+          "speed": {
+            "total_time": 45.33485007286072,
+            "generation_time": 6.526164874,
+            "tokens_per_sec": 63.13049209672786,
+            "tokens_generated": 412
+          },
+          "quality": {
+            "length": 0.3,
+            "korean_quality": 0.0,
+            "structure": 0.6,
+            "finance_terms": 0.8,
+            "overall": 0.425
+          },
+          "response_preview": "<think>\nOkay, the user is asking about Samsung's HBM competitiveness. Let me start by recalling what HBM is. HBM stands for High Bandwidth Memory, which is used in high-performance computing and AI applications. Samsung is a major player in this market.\n\nFirst, I should mention their technological l"
+        },
+        {
+          "prompt_type": "종합 분석",
+          "speed": {
+            "total_time": 37.133748292922974,
+            "generation_time": 10.818351901,
+            "tokens_per_sec": 62.301541507232585,
+            "tokens_generated": 674
+          },
+          "quality": {
+            "length": 0.3,
+            "korean_quality": 0.5,
+            "structure": 1.0,
+            "finance_terms": 1.0,
+            "overall": 0.7
+          },
+          "response_preview": "<think>\nOkay, I need to create an investment analysis report comparing Samsung and SK Hynix's HBM competitiveness. The user provided specific data points: Samsung is developing HBM3E with 16 layers and hybrid bonding, while SK Hynix is already mass-producing HBM3E and is a key supplier to NVIDIA. Th"
+        }
+      ],
+      "summary": {
+        "avg_tokens_per_sec": 62.716016801980224,
+        "avg_quality_score": 0.5625,
+        "comprehensive_analysis_time": 37.133748292922974,
+        "score": 58.83640672079209
+      }
+    },
+    "qwen2.5:14b": {
+      "model_name": "qwen2.5:14b",
+      "size": "9.0GB",
+      "priority": "medium",
+      "tests": [
+        {
+          "prompt_type": "간단한 분석",
+          "speed": {
+            "total_time": 32.89548110961914,
+            "generation_time": 2.373474606,
+            "tokens_per_sec": 58.985252947762106,
+            "tokens_generated": 140
+          },
+          "quality": {
+            "length": 1.0,
+            "korean_quality": 1.0,
+            "structure": 0.2,
+            "finance_terms": 0.4,
+            "overall": 0.65
+          },
+          "response_preview": "삼성전자는 고밀도 메모리(HBM) 시장에서 기술과 생산 양면에서 뛰어난 경쟁력을 보유하고 있습니다. 회사의 차세대 HBM 프로덕트는 성능, 용량, 전력 효율 측면에서 경쟁사를 압도하며, 특히 AI 및 고성능 컴퓨팅(HPC) 분야에서 핵심 부품으로 자리매김하고 있습니다. 또한, 대규모 양산 능력을 바탕으로 안정적인 공급망을 구축하여 시장 점유율 확대를 이어가고 있습니다."
+        },
+        {
+          "prompt_type": "종합 분석",
+          "speed": {
+            "total_time": 50.13868427276611,
+            "generation_time": 9.351749064,
+            "tokens_per_sec": 57.315481449706276,
+            "tokens_generated": 536
+          },
+          "quality": {
+            "length": 1.0,
+            "korean_quality": 1.0,
+            "structure": 1.0,
+            "finance_terms": 1.0,
+            "overall": 1.0
+          },
+          "response_preview": "# Executive Summary\n- 삼성전자는 HBM3E 16단 개발을 진행 중이며, 하이브리드 본딩 기술 도입으로 차세대 제품 경쟁력을 강화할 예정이다.\n- SK하이닉스는 이미 HBM3E 양산에 성공하여 엔비디아 등 주요 고객사와의 거래를 통해 실적 증가를 견인하고 있다.\n- 현재 시장에서 SK하이닉스가 기술적인 뒤처짐 없이 앞서나가고 있으나, 삼성전자의 신기술 도입 가능성으로 인해 장기적인 경쟁력 변화가 예상된다.\n\n# Market Analysis\nHBM(High Bandwidth Memory) 시장은 고성능 컴퓨팅 및 AI"
+        }
+      ],
+      "summary": {
+        "avg_tokens_per_sec": 58.15036719873419,
+        "avg_quality_score": 0.825,
+        "comprehensive_analysis_time": 50.13868427276611,
+        "score": 72.76014687949367
+      }
+    },
+    "qwen2:7b-instruct-q4_K_M": {
+      "model_name": "qwen2:7b-instruct-q4_K_M",
+      "size": "4.7GB",
+      "priority": "medium",
+      "tests": [
+        {
+          "prompt_type": "간단한 분석",
+          "speed": {
+            "total_time": 5.911187171936035,
+            "generation_time": 2.960135667,
+            "tokens_per_sec": 45.943840181430446,
+            "tokens_generated": 136
+          },
+          "quality": {
+            "length": 1.0,
+            "korean_quality": 1.0,
+            "structure": 0.2,
+            "finance_terms": 0.2,
+            "overall": 0.6000000000000001
+          },
+          "response_preview": "삼성전자의 HBM(High Bandwidth Memory)은 기존 SSD와 비교해 빠른 전송 속도와 대용량을 제공하는 고급 메모리 제품입니다. 삼성전자는 자체 R&D를 통해 뛰어난 성능과 신뢰성을 보여주며, 이는 삼성전자만의 경쟁력을 구축하는데 기여하고 있습니다. 또한, AI 및 머신러닝 같은 데이터 집중적인 분야에서 HBM의 필요성이 증가함에 따라 삼성전자의 제품 경쟁력은 더욱 강화될 것으로 예상됩니다."
+        },
+        {
+          "prompt_type": "종합 분석",
+          "speed": {
+            "total_time": 12.14266061782837,
+            "generation_time": 12.049302596,
+            "tokens_per_sec": 45.894772381563314,
+            "tokens_generated": 553
+          },
+          "quality": {
+            "length": 1.0,
+            "korean_quality": 1.0,
+            "structure": 1.0,
+            "finance_terms": 0.8,
+            "overall": 0.95
+          },
+          "response_preview": "# Executive Summary\n*삼성전자와 SK하이닉스의 HBM 경쟁력 비교에서 삼성전자가 SK하이닉스에 비해 빠른 기술 도입과 개발 능력을 보여주고 있습니다.* 그러나 *SK하이닉스는 이미 HBM3E를 양산 중이며, 엔비디아의 주요 공급업체라는 점에서 현재 시장 상황에서 우위를 차지하고 있습니다.*\n# Market Analysis\nHBM(High Bandwidth Memory)은 데이터 처리량을 높이는 중요한 기술로서, AI와 클라우드 컴퓨팅 등의 고성능 시스템에 필수적인 요소입니다. 최근 인공 지능과 클라우드 컴퓨팅의 쏟아"
+        }
+      ],
+      "summary": {
+        "avg_tokens_per_sec": 45.91930628149688,
+        "avg_quality_score": 0.775,
+        "comprehensive_analysis_time": 12.14266061782837,
+        "score": 64.86772251259876
+      }
+    },
+    "deepseek-r1:14b": {
+      "model_name": "deepseek-r1:14b",
+      "size": "9.0GB",
+      "priority": "medium",
+      "tests": [
+        {
+          "prompt_type": "간단한 분석",
+          "speed": {
+            "total_time": 40.551639795303345,
+            "generation_time": 11.396222815,
+            "tokens_per_sec": 58.08942232409309,
+            "tokens_generated": 662
+          },
+          "quality": {
+            "length": 0.3,
+            "korean_quality": 0.0,
+            "structure": 0.6,
+            "finance_terms": 0.6,
+            "overall": 0.375
+          },
+          "response_preview": "<think>\nOkay, so I need to figure out the core competitiveness of Samsung Electronics' HBM (High-Brightness Micro LED) display technology. Hmm, where do I start?\n\nFirst, what exactly is HBM? From what I remember, it's a type of display technology that Samsung developed. It stands for High-Brightness"
+        },
+        {
+          "prompt_type": "종합 분석",
+          "speed": {
+            "total_time": 28.71683669090271,
+            "generation_time": 13.942982073,
+            "tokens_per_sec": 57.376535077755456,
+            "tokens_generated": 800
+          },
+          "quality": {
+            "length": 0.3,
+            "korean_quality": 0.5,
+            "structure": 1.0,
+            "finance_terms": 0.8,
+            "overall": 0.65
+          },
+          "response_preview": "<think>\nAlright, I need to create an investment analysis report comparing Samsung Electronics and SK Hynix in terms of their HBM competitiveness. Let me start by understanding the data provided.\n\nSamsung is developing HBM3E with a 16-die configuration and plans to adopt hybrid bonding technology. On"
+        }
+      ],
+      "summary": {
+        "avg_tokens_per_sec": 57.73297870092428,
+        "avg_quality_score": 0.5125,
+        "comprehensive_analysis_time": 28.71683669090271,
+        "score": 53.84319148036971
+      }
+    },
+    "mistral-nemo:latest": {
+      "model_name": "mistral-nemo:latest",
+      "size": "7.1GB",
+      "priority": "low",
+      "tests": [
+        {
+          "prompt_type": "간단한 분석",
+          "speed": {
+            "total_time": 53.29107999801636,
+            "generation_time": 1.349032855,
+            "tokens_per_sec": 76.35099443148847,
+            "tokens_generated": 103
+          },
+          "quality": {
+            "length": 1.0,
+            "korean_quality": 1.0,
+            "structure": 0.2,
+            "finance_terms": 0.4,
+            "overall": 0.65
+          },
+          "response_preview": "삼성전자의 HBM(High Bandwidth Memory) 기술은 세계에서 가장 앞서 있습니다. HBM은 고속 데이터 처리와 큰 용량 데이터를 위한 메모리 솔루션으로, 그래픽 카드, 서버, AI 애플리케이션 등에 응용됩니다. 삼성전자는 이 분야에서 자사 HBM2의 4.8GB/s 데이터 전송 속도 및 저전력 특성을 내세워 시장에서 경쟁력을 보이고 있습니다."
+        },
+        {
+          "prompt_type": "종합 분석",
+          "speed": {
+            "total_time": 20.311410427093506,
+            "generation_time": 6.853323901,
+            "tokens_per_sec": 74.70827402821158,
+            "tokens_generated": 512
+          },
+          "quality": {
+            "length": 1.0,
+            "korean_quality": 1.0,
+            "structure": 1.0,
+            "finance_terms": 1.0,
+            "overall": 1.0
+          },
+          "response_preview": "# Executive Summary\n- 삼성전자가 HBM3E 개발 중으로 양산까지는 시간이 더 걸릴 수 있음\n- SK하이닉스가 엔비디아의 주요 공급업체로, HBM3E 양산 경험 우세\n- 하이브리드 본딩 기술은 삼성전자의 경쟁력 강화를 기대할 수 있음\n\n# Market Analysis\nHBM(High Bandwidth Memory)은 그래픽 카드와 같은 고성능 장치에서 빠른 속도의 메모리를 제공하는 데 중요한 역할을 합니다. 현재 시장은 엔비디아와 암드 두 대의 주자로 양분되어 있으며, SK하이닉스와 삼성전자는 HBM 공급업체로서 경"
+        }
+      ],
+      "summary": {
+        "avg_tokens_per_sec": 75.52963422985002,
+        "avg_quality_score": 0.825,
+        "comprehensive_analysis_time": 20.311410427093506,
+        "score": 79.71185369194001
+      }
+    }
+  }
+}
